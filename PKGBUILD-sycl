@@ -2,12 +2,12 @@
 # Contributor: txtsd <aur.archlinux@ihavea.quest>
 # Contributor: envolution
 
-pkgname=llama.cpp-cuda
-_pkgname=${pkgname%%-cuda}
+pkgname=llama.cpp-sycl
+_pkgname=${pkgname%%-sycl}
 _PREFIX_DIR=~/local-llama
-pkgver=b9934 # renovate: datasource=github-releases depName=ggml-org/llama.cpp
+pkgver=b10509 # renovate: datasource=github-releases depName=ggml-org/llama.cpp
 pkgrel=1
-pkgdesc="Port of Facebook's LLaMA model in C/C++ (with NVIDIA CUDA optimizations)"
+pkgdesc="Port of Facebook's LLaMA model in C/C++ (with SYCL/oneAPI optimizations)"
 arch=(x86_64 armv7h aarch64)
 url='https://github.com/ggml-org/llama.cpp'
 license=('MIT')
@@ -15,13 +15,16 @@ depends=(
   curl
   gcc-libs
   glibc
-  cuda
-  nvidia-utils
+  intel-compute-runtime
+  level-zero-loader
+  level-zero-headers
+  intel-oneapi-dpcpp-cpp
+  intel-oneapi-mkl-sycl
   python
 )
 makedepends=(
   cmake
-  cudnn
+  onednn
   git
   shaderc
   ninja
@@ -41,7 +44,7 @@ conflicts=(${_pkgname} libggml ggml)
 options=(lto !debug)
 backup=("etc/conf.d/llama.cpp")
 source=(
-  "${pkgname}-${pkgver}.tar.gz::https://github.com/ggml-org/llama.cpp/archive/refs/tags/${pkgver}.tar.gz"
+  "${_pkgname}-${pkgver}.tar.gz::https://github.com/ggml-org/llama.cpp/archive/refs/tags/${pkgver}.tar.gz"
   "https://github.com/ggml-org/llama.cpp/releases/download/${pkgver}/llama-${pkgver}-ui.tar.gz"
   llama.cpp.conf
   llama.cpp.service
@@ -78,9 +81,10 @@ build() {
     -DGGML_BUILD_TESTS=OFF
     -DGGML_LTO=ON
     -DGGML_RPC=ON
-    -DGGML_CUDA=ON
-    -DGGML_CUDA_FA_ALL_QUANTS=ON
-    -DGGML_CUDNN=ON
+    -DGGML_SYCL=ON
+    -DGGML_SYCL_F16=ON
+    -DCMAKE_C_COMPILER=icx \
+    -DCMAKE_CXX_COMPILER=icpx \
     -DLLAMA_BUILD_NUMBER="${pkgver#b}"
     -Wno-dev
   )
