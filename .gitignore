@@ -4,3 +4,5 @@ llama.cpp-cuda-sycl/*
 !llama.cpp-cuda-sycl/.nvchecker.toml
 !llama.cpp-cuda-sycl/llama.cpp.conf
 !llama.cpp-cuda-sycl/llama.cpp.service
+
+llama-swap_*.tar.gz
