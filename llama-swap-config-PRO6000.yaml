@@ -430,6 +430,7 @@ models:
       context: 262144
 
   # 3. q38fn
+  # N-gram offloaded to RAM (mmap), TODO MTP enabled
   "Qwen3.8-Flash-Next":
     cmd: |
       ${env.HOME}/local-llama/bin/llama-server
@@ -450,7 +451,7 @@ models:
     #  --spec-type draft-mtp --spec-draft-n-max 2
     env:
       - "CUDA_VISIBLE_DEVICES=6"
-    description: "MoE 125B/6B active, N-gram offloaded to RAM (mmap)" #, MTP enabled"
+    description: "MoE model (125B/6B active) from Aliyun Qwen"
     metadata:
       port: ${PORT}
       note: "N-gram embedding in system RAM, full 256K context"
@@ -560,7 +561,7 @@ routing:
           # members: the model IDs in this group
           # required
           members:
-            #- "Qwen3.8-27B"
+            - "Qwen3.8-27B"
             - "Qwen3.6-35B-A3B"
             - "Qwen3.8-Flash-Next"
 
