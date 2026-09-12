@@ -1,8 +1,6 @@
-*
-!PKGBUILD
-!PKGBUILD-*
-!.SRCINFO
-!.gitignore
-!.nvchecker.toml
-!llama.cpp.conf
-!llama.cpp.service
+llama.cpp-cuda-sycl/*
+!llama.cpp-cuda-sycl/PKGBUILD*
+!llama.cpp-cuda-sycl/.SRCINFO
+!llama.cpp-cuda-sycl/.nvchecker.toml
+!llama.cpp-cuda-sycl/llama.cpp.conf
+!llama.cpp-cuda-sycl/llama.cpp.service
