@@ -102,7 +102,7 @@ sendLoadingState: true
 # - optional, default: false
 # - when true, model aliases will be output to the API model listing duplicating
 #   all fields except for Id so chat UIs can use the alias equivalent to the original.
-#   列出变体, like :Instruct
+#   列出变体, like :Xxxx
 includeAliasesInList: true
 
 # globalTTL: the default TTL in seconds before unloading a model
@@ -257,7 +257,7 @@ models:
     # - using `|` allows for comments in the command, these will be parsed out
     # - macros can be used within cmd
     # - 参数测试：
-    #   * --reasoning, 是否开启思考模式，auto 则根据 template 确定。
+    #   * --reasoning, 是否开启思考模式，auto 则 **根据 template 确定**。
     #     代替老版本参数 --chat-template-kwargs '{"enable_thinking":true/false}'。
     #     模板 --chat-template deepseek3/chatml 等，默认为模型的 metadata。
     #     模板 --jinja 默认开启。
@@ -274,7 +274,7 @@ models:
       --model ${models_dir}/Qwen3.6-35B-A3B/${Qwen_35B_gf}
       --mmproj ${models_dir}/Qwen3.6-35B-A3B/mmproj-F16.gguf
       --ctx-size ${ctx_32k}
-      --reasoning on --reasoning-budget 1024
+      --reasoning auto
 
     # description: a description for the model
     # - optional, default: empty string
@@ -313,26 +313,19 @@ models:
       # - model aliases will be automatically created for each key
       # 参考: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF#best-practices
       setParamsByID:
-        # 变体 1：通用任务（默认）
+        # 变体：通用(编码)任务（默认）
         "${MODEL_ID}":
-          temperature: 0.8
-          top_p: 0.9  # 核采样，从概率最高的词开始累加概率，直到累积概率达到 top_p
-          top_k: 20   # 只从概率最高的 k 个词中采样
-          min_p: 0.0  # 保留所有概率 ≥ min_p * max_prob 的 token
-          # 防止思考循环
-          presence_penalty: 0.6  # 根据词是否已经出现过来惩罚或奖励, [-2.0(鼓励), 2.0(惩罚)]
-          repeat_penalty: 1.2    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
-        # 变体 2：编码任务
-        "${MODEL_ID}:code":
-          temperature: 0.5
-          top_p: 0.95
-          top_k: 20
-          min_p: 0.0
-          presence_penalty: 0.2
-          repeat_penalty: 1.1
-          reasoning-budget: 2048
-          chat_template_kwargs:
+          temperature: 0.7
+          top-p: 0.95 # 核采样，从概率最高的词开始累加概率，直到累积概率达到 top_p
+          top-k: 20   # 只从概率最高的 k 个词中采样
+          min-p: 0.0  # 保留所有概率 ≥ min_p * max_prob 的 token
+          reasoning-budget: 2560  # 限制思考阶段可用 token 数
+          chat-template-kwargs:
+            enable_thinking: true    # 开启思考（根据 template 变量确认）
             preserve_thinking: true  # 保留思考过程
+          # 防止思考循环
+          presence-penalty: 0.5  # 根据词是否已经出现过来惩罚, [0.0(不惩罚), 2.0(惩罚)]
+          repeat-penalty: 1.2    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
 
     # sendLoadingState: overrides the global sendLoadingState setting for this model
     # - optional, default: undefined (use global setting)
@@ -388,7 +381,7 @@ models:
       ${taskset-llama}
       --model ${models_dir}/Gemma4-26B-A4B/${gemma_26B_gf}
       --ctx-size ${ctx_32k}
-      --reasoning on --reasoning-budget 2048
+      --reasoning auto
     description: "Latest MoE model from Google Gemma-4 (Thinking)"
     metadata:
       port: ${PORT}
@@ -396,20 +389,15 @@ models:
     ttl: 36000 # 10h
     filters:
       setParamsByID:
-        # 变体 1：通用任务（默认）
+        # 变体：通用(编码)任务（默认）
         "${MODEL_ID}":
           temperature: 0.8
           top_p: 0.9
           top_k: 20
           min_p: 0.0
-        # 变体 2：编码任务
-        "${MODEL_ID}:code":
-          temperature: 0.5
-          top_p: 0.95
-          top_k: 20
-          min_p: 0.0
-          chat_template_kwargs:
-            preserve_thinking: true
+          reasoning-budget: 4096  # 限制思考阶段可用 token 数
+          chat-template-kwargs:
+            enable_thinking: true    # 开启思考
     sendLoadingState: true
     timeouts:
       connect: 30

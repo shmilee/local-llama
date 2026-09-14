@@ -102,7 +102,7 @@ sendLoadingState: true
 # - optional, default: false
 # - when true, model aliases will be output to the API model listing duplicating
 #   all fields except for Id so chat UIs can use the alias equivalent to the original.
-#   列出变体, like :Instruct
+#   列出变体, like :XXXX
 includeAliasesInList: true
 
 # globalTTL: the default TTL in seconds before unloading a model
@@ -199,22 +199,6 @@ apiKeys:
   #- "${env.API_KEY_1}"
   #- "${env.API_KEY_2}"
 
-# tailcat: configure models exposed over Tailcat virtual TCP port 80
-# - requires -listen-tailcat /path/to/server.private.json to start the listener
-# - when -listen-tailcat is set, models must contain at least one public ID
-# - empty allow permits any client holding the case-sensitive connection token
-# - "*" exposes every callable public ID
-# - admin defaults false and keeps the UI, /api, logs, metrics and operations private
-# - debug defaults false; set true to include verbose Tailcat transport logs in proxy logs
-# - changing allow or debug requires restarting llama-swap; models and admin update on reload
-tailcat:
-  allow:
-    - nodekey:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-  models:
-    - Qwen3.8-27B
-  admin: false
-  debug: false
-
 # upstream: controls behaviour of the /upstream passthrough endpoint
 # - optional, default: empty dictionary
 # - recommended to only use in special use cases. Leaving it as the
@@ -265,6 +249,7 @@ models:
       --mmproj ${models_dir}/Qwen3.8-27B/mmproj-BF16.gguf
       --ctx-size ${ctx_256k}
       --cache-ram 12288
+      --reasoning on
       --spec-type draft-mtp --spec-draft-n-max 3
     env:
       - "CUDA_VISIBLE_DEVICES=1"
@@ -312,18 +297,20 @@ models:
           top-p: 0.9  # 核采样，从概率最高的词开始累加概率，直到累积概率达到 top_p
           top-k: 20   # 只从概率最高的 k 个词中采样
           min-p: 0.0  # 保留所有概率 ≥ min_p * max_prob 的 token
-          reasoning: on           # 开启思考模式
-          reasoning-budget: 4096  # 限制思考阶段可用 token 数
+          reasoning-budget: 6144  # 限制思考阶段可用 token 数
           chat-template-kwargs:
             preserve_thinking: true  # 保留思考过程
             reasoning_effort: "medium"  # low, medium, xhigh
-        # 变体 2：指令任务
-        "${MODEL_ID}:Instruct":
+        # 变体 2：简单任务
+        "${MODEL_ID}:low":
           temperature: 0.7
           top-p: 0.8
           top-k: 20
           min-p: 0.0
-          reasoning: off
+          reasoning-budget: 2048    # 减少思考
+          chat-template-kwargs:
+            preserve_thinking: true  # 保留思考过程
+            reasoning_effort: "low"
           # 防止循环 endless
           presence-penalty: 0.5  # 惩罚已出现的词, [0.0(禁用), 2.0(惩罚)]
           repeat-penalty: 1.2    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
@@ -383,6 +370,7 @@ models:
       --mmproj ${models_dir}/Qwen3.6-35B-A3B/mmproj-BF16.gguf
       --ctx-size ${ctx_256k}
       --cache-ram 12288
+      --reasoning on
       --spec-type draft-mtp --spec-draft-n-max 3
     env:
       - "CUDA_VISIBLE_DEVICES=6"
@@ -399,22 +387,12 @@ models:
           top-p: 0.9  # 核采样，从概率最高的词开始累加概率，直到累积概率达到 top_p
           top-k: 20   # 只从概率最高的 k 个词中采样
           min-p: 0.0  # 保留所有概率 ≥ min_p * max_prob 的 token
-          reasoning: on           # 开启思考模式
-          reasoning-budget: 4096  # 限制思考阶段可用 token 数
+          reasoning-budget: 6144  # 限制思考阶段可用 token 数
           # 防止思考循环
           presence-penalty: 0.5  # 惩罚已出现的词, [0.0(禁用), 2.0(惩罚)]
           repeat-penalty: 1.2    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
           chat-template-kwargs:
             preserve_thinking: true  # 保留思考过程
-        # 变体 2：指令任务
-        "${MODEL_ID}:Instruct":
-          temperature: 0.7
-          top-p: 0.8
-          top-k: 20
-          min-p: 0.0
-          reasoning: off
-          presence-penalty: 0.5
-          repeat-penalty: 1.2
     sendLoadingState: true
     timeouts:
       connect: 30
@@ -446,6 +424,7 @@ models:
       --ubatch-size 4096
       --cache-ram 12288
       --ctx-size ${ctx_256k}
+      --reasoning on
     # MTP wait PR #28243
     #  --model-draft ${models_dir}/Qwen3.8-Flash-Next/MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
     #  --spec-type draft-mtp --spec-draft-n-max 2
@@ -463,16 +442,18 @@ models:
           top-p: 0.95
           top-k: 20
           min-p: 0.0
-          reasoning: on
-          reasoning-budget: 4096
+          reasoning-budget: 6144
+          chat-template-kwargs:
+            preserve_thinking: true  # 保留思考过程
+            reasoning_effort: "medium"  # low, medium, xhigh
+        "${MODEL_ID}:xhigh":
+          temperature: 1.0
+          top-p: 0.95
+          top-k: 20
+          min-p: 0.0
           chat-template-kwargs:
             preserve_thinking: true
-        "${MODEL_ID}:Instruct":
-          temperature: 0.7
-          top-p: 0.80
-          top-k: 20
-          reasoning: off
-          presence-penalty: 1.5
+            reasoning_effort: "xhigh"
     sendLoadingState: true
     timeouts:
       connect: 30
