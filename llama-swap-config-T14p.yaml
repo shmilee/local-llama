@@ -274,7 +274,8 @@ models:
       --model ${models_dir}/Qwen3.6-35B-A3B/${Qwen_35B_gf}
       --mmproj ${models_dir}/Qwen3.6-35B-A3B/mmproj-F16.gguf
       --ctx-size ${ctx_32k}
-      --reasoning auto
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/peculiar-ragdoll-v22.5.0.jinja
+      --reasoning on --reasoning-format deepseek
 
     # description: a description for the model
     # - optional, default: empty string
@@ -315,17 +316,18 @@ models:
       setParamsByID:
         # 变体：通用(编码)任务（默认）
         "${MODEL_ID}":
-          temperature: 0.7
+          temperature: 0.6
           top-p: 0.95 # 核采样，从概率最高的词开始累加概率，直到累积概率达到 top_p
           top-k: 20   # 只从概率最高的 k 个词中采样
           min-p: 0.0  # 保留所有概率 ≥ min_p * max_prob 的 token
-          reasoning-budget: 2560  # 限制思考阶段可用 token 数
+          reasoning-budget: 4096  # 限制思考阶段可用 token 数
           chat-template-kwargs:
             enable_thinking: true    # 开启思考（根据 template 变量确认）
             preserve_thinking: true  # 保留思考过程
+            reasoning_effort: "low"
           # 防止思考循环
-          presence-penalty: 0.5  # 根据词是否已经出现过来惩罚, [0.0(不惩罚), 2.0(惩罚)]
-          repeat-penalty: 1.2    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
+          presence-penalty: 0.1  # 根据词是否已经出现过来惩罚, [0.0(不惩罚), 2.0(惩罚)]
+          repeat-penalty: 1.1    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
 
     # sendLoadingState: overrides the global sendLoadingState setting for this model
     # - optional, default: undefined (use global setting)

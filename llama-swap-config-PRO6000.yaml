@@ -249,7 +249,8 @@ models:
       --mmproj ${models_dir}/Qwen3.8-27B/mmproj-BF16.gguf
       --ctx-size ${ctx_256k}
       --cache-ram 12288
-      --reasoning on
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/peculiar-ragdoll-v22.5.0.jinja
+      --reasoning on --reasoning-format deepseek
       --spec-type draft-mtp --spec-draft-n-max 3
     env:
       - "CUDA_VISIBLE_DEVICES=1"
@@ -293,27 +294,30 @@ models:
       setParamsByID:
         # 变体 1：通用(编码)任务（默认）
         "${MODEL_ID}":
-          temperature: 0.7
-          top-p: 0.9  # 核采样，从概率最高的词开始累加概率，直到累积概率达到 top_p
+          temperature: 1.0
+          top-p: 0.95 # 核采样，从概率最高的词开始累加概率，直到累积概率达到 top_p
           top-k: 20   # 只从概率最高的 k 个词中采样
           min-p: 0.0  # 保留所有概率 ≥ min_p * max_prob 的 token
-          reasoning-budget: 6144  # 限制思考阶段可用 token 数
+          reasoning-budget: 8192  # 限制思考阶段可用 token 数
           chat-template-kwargs:
             preserve_thinking: true  # 保留思考过程
             reasoning_effort: "medium"  # low, medium, xhigh
+          # 防止循环 endless
+          presence-penalty: 0.1  # 惩罚已出现的词, [0.0(禁用), 2.0(惩罚, Qwen3.6后，会破坏code语法)]
+          repeat-penalty: 1.1    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
         # 变体 2：简单任务
         "${MODEL_ID}:low":
-          temperature: 0.7
-          top-p: 0.8
+          temperature: 0.9
+          top-p: 0.95
           top-k: 20
           min-p: 0.0
-          reasoning-budget: 2048    # 减少思考
+          reasoning-budget: 4096    # 减少思考
           chat-template-kwargs:
             preserve_thinking: true  # 保留思考过程
             reasoning_effort: "low"
           # 防止循环 endless
-          presence-penalty: 0.5  # 惩罚已出现的词, [0.0(禁用), 2.0(惩罚)]
-          repeat-penalty: 1.2    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
+          presence-penalty: 0.0  # 惩罚已出现的词, [0.0(禁用), 2.0(惩罚)]
+          repeat-penalty: 1.1    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
 
     # sendLoadingState: overrides the global sendLoadingState setting for this model
     # - optional, default: undefined (use global setting)
@@ -370,7 +374,8 @@ models:
       --mmproj ${models_dir}/Qwen3.6-35B-A3B/mmproj-BF16.gguf
       --ctx-size ${ctx_256k}
       --cache-ram 12288
-      --reasoning on
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/peculiar-ragdoll-v22.5.0.jinja
+      --reasoning on --reasoning-format deepseek
       --spec-type draft-mtp --spec-draft-n-max 3
     env:
       - "CUDA_VISIBLE_DEVICES=6"
@@ -383,14 +388,14 @@ models:
       setParamsByID:
         # 变体 1：通用(编码)任务（默认）
         "${MODEL_ID}":
-          temperature: 0.8
-          top-p: 0.9  # 核采样，从概率最高的词开始累加概率，直到累积概率达到 top_p
+          temperature: 0.6
+          top-p: 0.95 # 核采样，从概率最高的词开始累加概率，直到累积概率达到 top_p
           top-k: 20   # 只从概率最高的 k 个词中采样
           min-p: 0.0  # 保留所有概率 ≥ min_p * max_prob 的 token
-          reasoning-budget: 6144  # 限制思考阶段可用 token 数
+          reasoning-budget: 8192  # 限制思考阶段可用 token 数
           # 防止思考循环
-          presence-penalty: 0.5  # 惩罚已出现的词, [0.0(禁用), 2.0(惩罚)]
-          repeat-penalty: 1.2    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
+          presence-penalty: 0.1  # 惩罚已出现的词, [0.0(禁用), 2.0(惩罚)]
+          repeat-penalty: 1.1    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
           chat-template-kwargs:
             preserve_thinking: true  # 保留思考过程
     sendLoadingState: true
@@ -424,7 +429,8 @@ models:
       --ubatch-size 4096
       --cache-ram 12288
       --ctx-size ${ctx_256k}
-      --reasoning on
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/froggeric-v22.5.jinja
+      --reasoning on --reasoning-format deepseek
     # MTP wait PR #28243
     #  --model-draft ${models_dir}/Qwen3.8-Flash-Next/MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
     #  --spec-type draft-mtp --spec-draft-n-max 2
@@ -442,7 +448,7 @@ models:
           top-p: 0.95
           top-k: 20
           min-p: 0.0
-          reasoning-budget: 6144
+          reasoning-budget: 8192
           chat-template-kwargs:
             preserve_thinking: true  # 保留思考过程
             reasoning_effort: "medium"  # low, medium, xhigh

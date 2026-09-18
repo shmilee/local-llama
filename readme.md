@@ -49,10 +49,21 @@ ms download  # 代替 hf download
    - 擅长代码
    - <https://huggingface.co/unsloth/Qwen3.8-27B-GGUF>
      + `Qwen3.8-27B-UD-Q8_K_XL.gguf`, `mmproj-BF16.gguf`
+   - <https://huggingface.co/ukisai/Swift-Qwen3.8-27B-GGUF> 减少 token 使用量
+     + ref: <https://www.reddit.com/r/LocalLLM/comments/1wgwgrf/comment/p9xkf6k/>
+     + `Swift-Qwen3.8-27B-Q8_0.gguf`, `mmproj-Swift-Qwen3.8-27B-F16.gguf`
+   - 长任务测试 <https://www.reddit.com/r/LocalLLM/comments/1wj1j9z/qwen_38_27b_running_for_63_hours_on_a_rtx_3090_to/>
+     + Riemann hypothesis
+     + 本地模型的长期记忆、工具调用、代码执行、上下文卸载/恢复
+
 
 2. MoE, Qwen3.8 Flash Next, Alibaba Cloud, qwen4 实验新架构
    - <https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF>
      + `Qwen3.8-Flash-Next-UD-IQ4_XS-0000{1,2,3}-of-00003.gguf`, `mmproj-F16.gguf`
+   - <https://huggingface.co/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF> 75.8G
+     + ref: <https://www.reddit.com/r/LocalLLM/comments/1wiynyo/comment/pael83n/>
+     + `IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-0000{1,2}-of-00002.gguf`
+     + `mmproj-Qwen3.8-Flash-Next-BF16.gguf`
 
 
 3. MoE, Qwen3.6, Alibaba Cloud, Text + Image + Video
@@ -204,6 +215,28 @@ hf download --local-dir ./Embedding ggml-org/embeddinggemma-300m-GGUF \
     embeddinggemma-300M-Q8_0.gguf
 hf download --local-dir ./Embedding batiai/Qwen3-VL-Embedding-2B-GGUF \
     Qwen3-VL-Embedding-2B-Q8_0.gguf
+```
+
+
+## Chat-Templates
+
+注意：可能会影响 pp、tg 速度，或 MTP draft 接受率下降。
+
+1. <https://huggingface.co/froggeric/Qwen-Fixed-Chat-Templates>
+  + v22.5: `chat_template.jinja`
+  + `--reasoning-format deepseek` matters.
+  + [recommend temperature](https://huggingface.co/froggeric/Qwen-Fixed-Chat-Templates/discussions/100)
+
+2. <https://huggingface.co/peculiar-ragdoll/Qwen-Sharp-Chat-Templates>
+  + based on `froggeric/Qwen-Fixed-Chat-Templates`
+  + v22.5.0: `chat_template.jinja`
+
+```
+hf download --local-dir ./Qwen-chat-templates hf://froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja
+mv ./Qwen-chat-templates/{chat_template.jinja,froggeric-v22.5.jinja}
+
+hf download --local-dir ./Qwen-chat-templates hf://peculiar-ragdoll/Qwen-Sharp-Chat-Templates/chat_template.jinja
+mv ./Qwen-chat-templates/{chat_template.jinja,,peculiar-ragdoll-v22.5.0.jinja}
 ```
 
 
