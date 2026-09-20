@@ -19,7 +19,7 @@
 # healthCheckTimeout: number of seconds to wait for a model to be ready to serve requests
 # - optional, default: 120
 # - minimum value is 15 seconds, anything less will be set to this value
-healthCheckTimeout: 500
+healthCheckTimeout: 900  # 15min
 
 # logLevel: sets the logging value
 # - optional, default: info
@@ -316,7 +316,7 @@ models:
             preserve_thinking: true  # 保留思考过程
             reasoning_effort: "low"
           # 防止循环 endless
-          presence-penalty: 0.0  # 惩罚已出现的词, [0.0(禁用), 2.0(惩罚)]
+          presence-penalty: 0.1  # 惩罚已出现的词, [0.0(禁用), 2.0(惩罚)]
           repeat-penalty: 1.1    # 根据词出现的次数进行惩罚, [1.0(不惩罚), 1.5]
 
     # sendLoadingState: overrides the global sendLoadingState setting for this model
@@ -374,7 +374,7 @@ models:
       --mmproj ${models_dir}/Qwen3.6-35B-A3B/mmproj-BF16.gguf
       --ctx-size ${ctx_256k}
       --cache-ram 12288
-      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/peculiar-ragdoll-v22.5.0.jinja
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/froggeric-v22.5.jinja
       --reasoning on --reasoning-format deepseek
       --spec-type draft-mtp --spec-draft-n-max 3
     env:
@@ -429,7 +429,7 @@ models:
       --ubatch-size 4096
       --cache-ram 12288
       --ctx-size ${ctx_256k}
-      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/froggeric-v22.5.jinja
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/peculiar-ragdoll-v22.5.0.jinja
       --reasoning on --reasoning-format deepseek
     # MTP wait PR #28243
     #  --model-draft ${models_dir}/Qwen3.8-Flash-Next/MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
@@ -523,7 +523,6 @@ routing:
       #   `persistent` fields
       # - see issue #109 for details
       #
-      # NOTE: the model names below are illustrative and are not defined above.
       groups:
         # group1 reproduces llama-swap's default behaviour: only one model
         # runs at a time across the entire instance.
@@ -548,7 +547,7 @@ routing:
           # members: the model IDs in this group
           # required
           members:
-            - "Qwen3.8-27B"
+            #- "Qwen3.8-27B"
             - "Qwen3.6-35B-A3B"
             - "Qwen3.8-Flash-Next"
 

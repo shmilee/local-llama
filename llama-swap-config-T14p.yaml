@@ -19,7 +19,7 @@
 # healthCheckTimeout: number of seconds to wait for a model to be ready to serve requests
 # - optional, default: 120
 # - minimum value is 15 seconds, anything less will be set to this value
-healthCheckTimeout: 500
+healthCheckTimeout: 390
 
 # logLevel: sets the logging value
 # - optional, default: info
@@ -345,7 +345,7 @@ models:
     timeouts:
       connect: 30
       keepalive: 30
-      responseHeader: 600 # 10min 模型处理图片（多模态）时，需等待较长时间
+      responseHeader: 900 # 15min 模型处理图片（多模态）时，需等待较长时间
       tlsHandshake: 10
       idleConn: 90
 
@@ -404,7 +404,7 @@ models:
     timeouts:
       connect: 30
       keepalive: 30
-      responseHeader: 600 # 10min
+      responseHeader: 900 # 15min
       tlsHandshake: 10
       idleConn: 90
     capabilities:
@@ -436,7 +436,7 @@ models:
     timeouts:
       connect: 30
       keepalive: 30
-      responseHeader: 600 # 10min
+      responseHeader: 900 # 15min
       tlsHandshake: 10
       idleConn: 90
     capabilities:
@@ -469,7 +469,7 @@ models:
     timeouts:
       connect: 30
       keepalive: 30
-      responseHeader: 600 # 10min
+      responseHeader: 900 # 15min
       tlsHandshake: 10
       idleConn: 90
     capabilities:
