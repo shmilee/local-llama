@@ -52,6 +52,8 @@ ms download  # 代替 hf download
    - <https://huggingface.co/ukisai/Swift-Qwen3.8-27B-GGUF> 减少 token 使用量
      + ref: <https://www.reddit.com/r/LocalLLM/comments/1wgwgrf/comment/p9xkf6k/>
      + `Swift-Qwen3.8-27B-Q8_0.gguf`, `mmproj-Swift-Qwen3.8-27B-F16.gguf`
+   - FP8 量化 <https://huggingface.co/Qwen/Qwen3.8-27B-FP8>
+     + 30.9G, `hf download Qwen/Qwen3.8-27B-FP8 --local-dir ./Qwen3.8-27B-FP8`
    - 长任务测试 <https://www.reddit.com/r/LocalLLM/comments/1wj1j9z/qwen_38_27b_running_for_63_hours_on_a_rtx_3090_to/>
      + Riemann hypothesis
      + 本地模型的长期记忆、工具调用、代码执行、上下文卸载/恢复
@@ -60,9 +62,11 @@ ms download  # 代替 hf download
 2. MoE, Qwen3.8 Flash Next, Alibaba Cloud, qwen4 实验新架构
    - <https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF>
      + `Qwen3.8-Flash-Next-UD-IQ4_XS-0000{1,2,3}-of-00003.gguf`, `mmproj-F16.gguf`
-   - <https://huggingface.co/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF> 75.8G
+   - NVFP4 量化 <https://huggingface.co/nvidia/Qwen3.8-Flash-Next-NVFP4>
+     + 133G, `hf download nvidia/Qwen3.8-Flash-Next-NVFP4 --local-dir ./Qwen3.8-Flash-Next-NVFP4`
+   - <https://huggingface.co/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF>
      + ref: <https://www.reddit.com/r/LocalLLM/comments/1wiynyo/comment/pael83n/>
-     + `IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-0000{1,2}-of-00002.gguf`
+     + 75.8G, `IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-0000{1,2}-of-00002.gguf`
      + `mmproj-Qwen3.8-Flash-Next-BF16.gguf`
 
 
@@ -136,6 +140,9 @@ export HF_ENDPOINT=https://hf-mirror.com
 hf download --local-dir ./Qwen3.8-27B unsloth/Qwen3.8-27B-GGUF \
     Qwen3.8-27B-UD-Q8_K_XL.gguf mmproj-BF16.gguf
 
+# 服务器下载 Qwen3.8 FP8
+hf download --local-dir ./Qwen3.8-27B-FP8 Qwen/Qwen3.8-27B-FP8
+
 # 服务器下载测试 Qwen3.8-Flash-Next 177B
 hf download --local-dir ./Qwen3.8-Flash-Next unsloth/Qwen3.8-Flash-Next-GGUF \
     UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf \
@@ -143,6 +150,9 @@ hf download --local-dir ./Qwen3.8-Flash-Next unsloth/Qwen3.8-Flash-Next-GGUF \
     UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00003-of-00003.gguf \
     MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf \
     mmproj-F16.gguf
+
+# 服务器下载 Qwen3.8 Flash Next FP4
+hf download --local-dir ./Qwen3.8-Flash-Next-NVFP4 nvidia/Qwen3.8-Flash-Next-NVFP4
 
 # 服务器下载 Qwen3.6 MoE模型 Q8
 hf download --local-dir ./Qwen3.6-35B-A3B unsloth/Qwen3.6-35B-A3B-MTP-GGUF \
