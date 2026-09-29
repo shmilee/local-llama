@@ -1,22 +1,30 @@
 # ============================================================
-# 🦙 local-llama — pixi 管理 llama.cpp (CUDA / Vulkan) 环境
+# 🦙 local-llama — pixi 管理 llama.cpp / vLLM / SGLang 环境
 #
 # 常用命令:
 #   pixi install -e llamacpp-cuda          # 安装 CUDA 环境
-#   pixi run   -e llamacpp-cuda llamacpp-build   # 下载源码并编译 + 安装
-#   pixi run   -e llamacpp-cuda llamacpp-verify  # 验证安装（bin + --version + GPU 设备）
-#   pixi run   -e llamacpp-cuda llamacpp-path    # 打印 llama-server 绝对路径
+#   pixi run -e llamacpp-cuda llamacpp-build     # 下载源码并编译 + 安装
+#   pixi run -e llamacpp-cuda llamacpp-verify    # 验证安装（bin + --version + GPU 设备）
+#   pixi run -e llamacpp-cuda llamacpp-path      # 打印 llama-server 绝对路径
 #
 #   pixi install -e llamacpp-vulkan        # 安装 Vulkan 环境
-#   pixi run   -e llamacpp-vulkan llamacpp-build
-#   pixi run   -e llamacpp-vulkan llamacpp-verify
-#   pixi run   -e llamacpp-vulkan llamacpp-path
+#   pixi run -e llamacpp-vulkan llamacpp-build
+#   pixi run -e llamacpp-vulkan llamacpp-verify
+#   pixi run -e llamacpp-vulkan llamacpp-path
+#
+#   pixi install -e vllm-cuda              # 安装 vLLM 环境（PyPI 最新版 + torch cu130）
+#   pixi run -e vllm-cuda vllm-cuda-prepare      # 整理 pip nvidia 包为标准 CUDA toolkit 布局
+#   pixi run -e vllm-cuda vllm-cuda-verify       # 验证安装（import/CUDA + 工具链 + flashinfer JIT）
+#
+#   pixi install -e sglang-cuda            # 安装 SGLang 环境（PyPI 最新版 + torch cu130）
+#   pixi run -e sglang-cuda sglang-cuda-prepare  # 整理 pip nvidia 包为标准 CUDA toolkit 布局
+#   pixi run -e sglang-cuda sglang-cuda-verify   # 验证安装（版本 + CUDA + 工具链信息）
 # ============================================================
 
 [workspace]
 name = "🦙"
 version = "0.1.0"
-description = "Local LLM inference: llama.cpp environments managed by Pixi"
+description = "Local LLM inference: llama.cpp / vLLM / SGLang environments managed by Pixi"
 authors = ["shmilee <shmilee.zju@gmail.com>"]
 channels = ["conda-forge"]
 platforms = [
@@ -24,7 +32,7 @@ platforms = [
     # 注意：与标准 subdir 相同 name 的平台不能携带自定义 virtual package（如 glibc pin）
     #       —— 如需 pin glibc，必须给平台另起名字
     "linux-64",
-    # 平台：CUDA 13.x, llama.cpp CUDA
+    # 平台：CUDA 13.x, llama.cpp CUDA / vLLM / SGLang
     { name = "linux-64-cu13", platform = "linux-64", cuda = "13.2", glibc = "2.39" },
 ]
 
@@ -36,6 +44,23 @@ PIXI_CHANGE_PS1 = "true"
 #index-url = "https://pypi.org/simple"
 index-url = "https://mirrors.ustc.edu.cn/pypi/simple"
 #index-url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+
+# torch 系 cu130 wheel 从国内镜像取（等价 pip --find-links）：
+# 南大/上交的 wheel 文件在 cu130/ 根下，但列表页按项目分子目录，
+# 故 find-links 指向各项目的子目录；阿里云是 flat-file 布局，直接指向根目录。
+# 官方源: https://download.pytorch.org/whl/cu130
+# 按下载速度排序。
+find-links = [
+    { url = "https://mirrors.nju.edu.cn/pytorch/whl/cu130/torch" },
+    { url = "https://mirrors.nju.edu.cn/pytorch/whl/cu130/torchaudio" },
+    { url = "https://mirrors.nju.edu.cn/pytorch/whl/cu130/torchvision" },
+    { url = "https://mirrors.nju.edu.cn/pytorch/whl/cu130/torchcodec" },
+    { url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu130/torch" },
+    { url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu130/torchaudio" },
+    { url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu130/torchvision" },
+    { url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu130/torchcodec" },
+    { url = "https://mirrors.aliyun.com/pytorch-wheels/cu130" },
+]
 
 
 
@@ -59,6 +84,7 @@ libgomp = "*"
 [feature.llama-base.activation.env]
 # 让 CMake 优先在 pixi 环境内查找依赖，而不是系统路径
 CMAKE_PREFIX_PATH = "$CONDA_PREFIX"
+
 # llama.cpp 版本号（对应 GitHub release tag）
 # 从 b10909 到 b11224 出现 decode 回退，速率变慢，待上游修复
 LLAMACPP_VERSION = "b10909"
@@ -136,8 +162,136 @@ LLAMACPP_BACKEND = "vulkan"
 
 
 # ============================================================
+# Feature: vLLM (PyPI, CUDA 13 后端)
+#
+# 直接从 PyPI 安装（conda-forge 无对应包）。vLLM 严格 pin torch 版本，
+# PyPI 默认 torch wheel 是 CUDA 12 构建，因此 torch 系四件套须显式
+# 从 download.pytorch.org 的 cu130 index 取。
+#
+# CUDA 运行时与编译工具链全部自包含于 torch wheel 依赖的 nvidia-*-cu13
+# pip 包（site-packages/nvidia/cu13/），不依赖系统 /usr/local/cuda，
+# 也不装 conda cuda 包。唯一系统依赖：NVIDIA 驱动（libcuda.so.1）。
+# vllm-cuda-prepare 任务将 pip 包布局整理为标准 CUDA toolkit 目录结构
+# （$CONDA_PREFIX/vllm-cuda/{bin,include,lib,lib64}），供
+# flashinfer JIT 与 torch inductor 按 CUDA_HOME 查找。
+# ============================================================
+[feature.vllm-cuda]
+platforms = ["linux-64-cu13"]
+
+[feature.vllm-cuda.dependencies]
+python = "3.12.*"
+# flashinfer JIT 与 torch cpp_extension 的 host 编译器。
+# nvcc 的 -ccbin 默认指向 $CUDA_HOME/bin，与 CXX 保持同一编译器。
+gxx_linux-64 = ">=13"
+
+[feature.vllm-cuda.activation.env]
+# flashinfer（get_cuda_path）与 torch inductor 的 nvcc/头文件来源。
+# vllm-cuda-prepare 生成的标准 CUDA toolkit 布局。
+CUDA_HOME = "$CONDA_PREFIX/vllm-cuda"
+# 显式指定 nvcc 路径，不依赖 PATH 查找。
+CUDACXX = "$CONDA_PREFIX/vllm-cuda/bin/nvcc"
+# flashinfer 链接步骤的 C++ 编译器。conda-forge g++ 无裸名符号链接，
+# 须用交叉编译全名。
+CXX = "x86_64-conda-linux-gnu-g++"
+# flashinfer 对 SM12.x 默认要求 CUDA>=12.9（compute_120f）。
+# 显式指定 12.0a 匹配 Blackwell (SM120) 硬件。
+FLASHINFER_CUDA_ARCH_LIST = "12.0a"
+# PyPI 的 nvidia-cuda-nvcc (13.4) 与 nvidia-cuda-runtime (13.0) 版本独立，
+# CCCL 头文件的编译器/工具链 minor 一致性检查会误报。
+# 用官方 define 关闭（13.4 编译 13.0 头文件无实际兼容问题）。
+FLASHINFER_EXTRA_CUDAFLAGS = "-DCCCL_DISABLE_CTK_COMPATIBILITY_CHECK"
+
+[feature.vllm-cuda.pypi-dependencies]
+vllm = ">=0.30,<0.31"
+# torch 系四件套：版本与 vLLM 的 pin 一致。
+# cu130 wheel 通过 workspace 级 [pypi-options] 的 find-links 从国内镜像取
+# （等价 pip --find-links），不走 index。
+torch = { version = "==2.13.0+cu130" }
+torchaudio = { version = "==2.11.0+cu130" }
+torchvision = { version = "==0.28.0+cu130" }
+torchcodec = { version = "==0.15.0+cu130" }
+
+[feature.vllm-cuda.tasks]
+# 整理 pip nvidia 包为标准 CUDA toolkit 布局（symlink 视图）。幂等。
+# vllm-cuda-verify 会在缺失时自动调用；pip 包升级后需重跑。
+vllm-cuda-prepare = "bash $PIXI_PROJECT_ROOT/scripts/vllm-cuda-prepare.sh"
+# 安装后验证：import/CUDA 检查 + 工具链自检 + flashinfer JIT 探针。不加载大模型。
+vllm-cuda-verify = "bash $PIXI_PROJECT_ROOT/scripts/vllm-cuda-verify.sh"
+
+
+# ============================================================
+# Feature: SGLang (PyPI, CUDA 13 后端)
+#
+# 与 vLLM 同样的策略：PyPI 装 sglang，torch 系从 cu130 源取。
+# CUDA 运行时与编译工具链全部自包含于 torch wheel 依赖的 nvidia-*-cu13
+# pip 包（site-packages/nvidia/cu13/），不依赖系统 /usr/local/cuda。
+# 唯一系统依赖：NVIDIA 驱动（libcuda.so.1）。
+# sglang-cuda-prepare 任务将 pip 包布局整理为标准 CUDA toolkit 目录结构
+# （$CONDA_PREFIX/sglang-cuda/{bin,include,lib,lib64}），供 flashinfer
+# JIT 按 CUDA_HOME 查找 nvcc、头文件与库。
+#
+# SGLang 0.5.20 的 pin：torch==2.13.0 / torchaudio==2.11.0 /
+# torchcodec==0.15.0 / transformers==5.12.1 / sglang-kernel==0.4.7 /
+# flashinfer_python[cu13]==0.6.18（cu13 extra 直接拉 CUDA 13 构建）。
+# sglang-kernel 是 abi3 单 wheel（不分 CUDA 版本），依赖仅 torch==2.13.0。
+# 注意：sglang 与 vllm 的 transformers/torchcodec pin 不同，
+#       必须各自独立 solve-group。
+# ============================================================
+[feature.sglang-cuda]
+platforms = ["linux-64-cu13"]
+
+[feature.sglang-cuda.dependencies]
+python = "3.12.*"
+# flashinfer JIT 的 host 编译器。
+# nvcc 的 -ccbin 默认指向 $CUDA_HOME/bin，与 CXX 保持同一编译器。
+gxx_linux-64 = ">=13"
+
+[feature.sglang-cuda.activation.env]
+# flashinfer（get_cuda_path）的 nvcc/头文件来源。
+# sglang-cuda-prepare 生成的标准 CUDA toolkit 布局。
+CUDA_HOME = "$CONDA_PREFIX/sglang-cuda"
+# 显式指定 nvcc 路径，不依赖 PATH 查找。
+CUDACXX = "$CONDA_PREFIX/sglang-cuda/bin/nvcc"
+# flashinfer 链接步骤的 C++ 编译器。conda-forge g++ 无裸名符号链接，
+# 须用交叉编译全名。
+CXX = "x86_64-conda-linux-gnu-g++"
+# flashinfer 对 SM12.x 默认要求 CUDA>=12.9（compute_120f）。
+# 显式指定 12.0a 匹配 Blackwell (SM120) 硬件。
+FLASHINFER_CUDA_ARCH_LIST = "12.0a"
+# PyPI 的 nvidia-cuda-nvcc (13.4) 与 nvidia-cuda-runtime (13.0) 版本独立，
+# CCCL 头文件的编译器/工具链 minor 一致性检查会误报。
+# 用官方 define 关闭（13.4 编译 13.0 头文件无实际兼容问题）。
+FLASHINFER_EXTRA_CUDAFLAGS = "-DCCCL_DISABLE_CTK_COMPATIBILITY_CHECK"
+
+[feature.sglang-cuda.pypi-dependencies]
+sglang = ">=0.5.20,<0.6"
+# torch 系四件套：版本与 SGLang 的 pin 一致。
+# cu130 wheel 通过 workspace 级 [pypi-options] 的 find-links 从国内镜像取
+# （等价 pip --find-links），不走 index。
+torch = { version = "==2.13.0+cu130" }
+torchaudio = { version = "==2.11.0+cu130" }
+torchvision = { version = "==0.28.0+cu130" }
+torchcodec = { version = "==0.15.0+cu130" }
+
+# sglang 0.5.20 硬 pin 预发布版 cuda-tile==1.6.0rc5，必须放开 pre-release
+[feature.sglang-cuda.pypi-options]
+prerelease-mode = "allow"
+
+[feature.sglang-cuda.tasks]
+# 整理 pip nvidia 包为标准 CUDA toolkit 布局（symlink 视图）。幂等。
+# nvcc 为 wrapper 脚本：向每次编译注入 CCCL 兼容性检查的关闭 define
+# （sglang 自带 JIT 不读取 flashinfer 的 extra-flags 环境变量）。
+# sglang-cuda-verify 会在缺失时自动调用；pip 包升级后需重跑。
+sglang-cuda-prepare = "bash $PIXI_PROJECT_ROOT/scripts/sglang-cuda-prepare.sh"
+# 安装后验证：版本 + CUDA 设备 + 工具链信息展示。不加载大模型。
+sglang-cuda-verify = "bash $PIXI_PROJECT_ROOT/scripts/sglang-cuda-verify.sh"
+
+
+# ============================================================
 # 环境定义
 # ============================================================
 [environments]
 llamacpp-cuda = { features = ["llama-base", "llamacpp-cuda"], solve-group = "llamacpp-cuda" }
 llamacpp-vulkan = { features = ["llama-base", "llamacpp-vulkan"], solve-group = "llamacpp-vulkan" }
+vllm-cuda = { features = ["vllm-cuda"], solve-group = "vllm-cuda" }
+sglang-cuda = { features = ["sglang-cuda"], solve-group = "sglang-cuda" }
