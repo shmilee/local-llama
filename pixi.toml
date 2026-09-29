@@ -1,0 +1,142 @@
+# ============================================================
+# 🦙 local-llama — pixi 管理 llama.cpp (CUDA / Vulkan) 环境
+#
+# 常用命令:
+#   pixi install -e llamacpp-cuda          # 安装 CUDA 环境
+#   pixi run   -e llamacpp-cuda llamacpp-build   # 下载源码并编译 + 安装
+#   pixi run   -e llamacpp-cuda llamacpp-verify  # 验证安装（bin + --version + GPU 设备）
+#   pixi run   -e llamacpp-cuda llamacpp-path    # 打印 llama-server 绝对路径
+#
+#   pixi install -e llamacpp-vulkan        # 安装 Vulkan 环境
+#   pixi run   -e llamacpp-vulkan llamacpp-build
+#   pixi run   -e llamacpp-vulkan llamacpp-verify
+#   pixi run   -e llamacpp-vulkan llamacpp-path
+# ============================================================
+
+[workspace]
+name = "🦙"
+version = "0.1.0"
+description = "Local LLM inference: llama.cpp environments managed by Pixi"
+authors = ["shmilee <shmilee.zju@gmail.com>"]
+channels = ["conda-forge"]
+platforms = [
+    # 标准 linux-64 平台（llama.cpp Vulkan）
+    # 注意：与标准 subdir 相同 name 的平台不能携带自定义 virtual package（如 glibc pin）
+    #       —— 如需 pin glibc，必须给平台另起名字
+    "linux-64",
+    # 平台：CUDA 13.x, llama.cpp CUDA
+    { name = "linux-64-cu13", platform = "linux-64", cuda = "13.2", glibc = "2.39" },
+]
+
+# https://pixi.prefix.dev/latest/workspace/environment/#activation
+[target.unix.activation.env]
+PIXI_CHANGE_PS1 = "true"
+
+[pypi-options]
+#index-url = "https://pypi.org/simple"
+index-url = "https://mirrors.ustc.edu.cn/pypi/simple"
+#index-url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+
+
+
+# ============================================================
+# Feature: llama.cpp 公共基础
+# （编译工具、编译器、基础运行库、版本变量、共用任务）
+# ============================================================
+[feature.llama-base.dependencies]
+# --- 编译工具（cmake >=3.24 才支持 CMAKE_CUDA_ARCHITECTURES=native）---
+cmake = ">=3.24"
+ninja = ">=1.11"
+curl = "*"
+# --- C/C++ 编译器（gcc_linux-64 同时作为 nvcc 的 host 编译器）---
+gcc_linux-64 = ">=13"
+gxx_linux-64 = ">=13"
+# --- 基础运行库 ---
+libcurl = "*"
+openssl = "*"
+libgomp = "*"
+
+[feature.llama-base.activation.env]
+# 让 CMake 优先在 pixi 环境内查找依赖，而不是系统路径
+CMAKE_PREFIX_PATH = "$CONDA_PREFIX"
+# llama.cpp 版本号（对应 GitHub release tag）
+LLAMACPP_VERSION = "b11224"
+# 注意：LLAMACPP_BACKEND 只在各后端 feature 中定义
+# （pixi 多个 feature 定义同名环境变量时，feature 列表靠前者获胜，
+#   base 里绝不能定义该变量，否则会静默覆盖 backend feature 的值）
+# LLAMACPP_BUILD_DIR 为可选覆盖项（llamacpp-build.sh 默认派生 build-$BACKEND）
+
+[feature.llama-base.tasks]
+# 下载 + 解压源码与 UI 包到 download/（幂等，可重复执行）
+# UI 包用于离线环境：CMake 发现 tools/ui/dist 已有 index.html 时不再联网构建
+llamacpp-src = "bash $PIXI_PROJECT_ROOT/scripts/llamacpp-src.sh"
+
+# 打印 llama-server 绝对路径（llamacpp-build 安装到 $CONDA_PREFIX/bin）
+llamacpp-path = "which llama-server"
+
+# 编译 + 安装（安装到 $CONDA_PREFIX/bin，RPATH 相对定位 lib）
+# 后端由 $LLAMACPP_BACKEND 自动区分（各 backend feature 单独定义）
+[feature.llama-base.tasks.llamacpp-build]
+depends-on = ["llamacpp-src"]
+cmd = "bash $PIXI_PROJECT_ROOT/scripts/llamacpp-build.sh"
+
+# 验证安装：bin 存在 + --version + 运行时能检测到对应后端 GPU
+[feature.llama-base.tasks.llamacpp-verify]
+cmd = "bash $PIXI_PROJECT_ROOT/scripts/llamacpp-verify.sh"
+
+
+# ============================================================
+# Feature: llama.cpp (CUDA, 源码编译)
+# ============================================================
+[feature.llamacpp-cuda]
+platforms = ["linux-64-cu13"]
+
+[feature.llamacpp-cuda.dependencies]
+# --- CUDA 编译栈（conda-forge 拆分包，pin 到 13.2 匹配平台声明）---
+# cuda-version 是 noarch 版本锁定包，使下列包全部解析到 CUDA 13.2 栈。
+# 注意：各库有独立版本号（如 cuBLAS 在 13.2 栈中是 13.3/13.4），
+#       所以这里只 pin cuda-version，其余用 * 让求解器自动匹配。
+cuda-version = "=13.2"
+# nvcc 编译器（$CONDA_PREFIX/bin/nvcc）
+cuda-nvcc = "*"
+# CUDA Runtime（ggml-cuda 硬依赖 CUDA::cudart）
+cuda-cudart-dev = "*"
+# cuBLAS（ggml-cuda 无条件链接 CUDA::cublas）
+libcublas-dev = "*"
+# --- 可选 ---
+# NCCL：仅 -DGGML_CUDA_NCCL=ON 时需要（多卡 NCCL 通信）
+# nccl = "2.*"
+# 说明：llama.cpp 的 CUDA 后端（ggml-cuda）是自包含实现，不需要 cuDNN。
+
+[feature.llamacpp-cuda.activation.env]
+CUDACXX = "$CONDA_PREFIX/bin/nvcc"
+# 后端标识（共用任务 llamacpp-build / llamacpp-verify 据此区分）
+LLAMACPP_BACKEND = "cuda"
+
+
+# ============================================================
+# Feature: llama.cpp (Vulkan, 源码编译)
+# ============================================================
+[feature.llamacpp-vulkan]
+platforms = ["linux-64"]
+
+[feature.llamacpp-vulkan.dependencies]
+# --- Vulkan 编译与运行时依赖 ---
+libvulkan-loader = "*"        # Vulkan ICD 加载器（运行时）
+libvulkan-headers = "*"       # Vulkan API 头文件（注意不是过时的 vulkan-headers）
+spirv-headers = "*"
+spirv-tools = "*"
+shaderc = "*"                 # 提供 glslc，编译 GLSL 着色器
+
+[feature.llamacpp-vulkan.activation.env]
+# 后端标识（共用任务 llamacpp-build / llamacpp-verify 据此区分）
+LLAMACPP_BACKEND = "vulkan"
+
+
+
+# ============================================================
+# 环境定义
+# ============================================================
+[environments]
+llamacpp-cuda = { features = ["llama-base", "llamacpp-cuda"], solve-group = "llamacpp-cuda" }
+llamacpp-vulkan = { features = ["llama-base", "llamacpp-vulkan"], solve-group = "llamacpp-vulkan" }

@@ -1,0 +1,9 @@
+[mirrors]
+"https://conda.anaconda.org/conda-forge" = ["https://mirrors.ustc.edu.cn/anaconda/cloud/conda-forge"]
+
+[pypi-config]
+index-url = "https://mirrors.ustc.edu.cn/pypi/simple"
+
+[concurrency]
+solves = 3
+downloads = 6
