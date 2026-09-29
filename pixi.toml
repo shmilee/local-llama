@@ -185,6 +185,9 @@ python = "3.12.*"
 gxx_linux-64 = ">=13"
 
 [feature.vllm-cuda.activation.env]
+# vLLM 的 has_flashinfer() 用 shutil.which("nvcc")（PATH 查找）判断
+# flashinfer 是否可用，须把 nvcc 放进 PATH。
+PATH = "$CONDA_PREFIX/vllm-cuda/bin:$PATH"
 # flashinfer（get_cuda_path）与 torch inductor 的 nvcc/头文件来源。
 # vllm-cuda-prepare 生成的标准 CUDA toolkit 布局。
 CUDA_HOME = "$CONDA_PREFIX/vllm-cuda"
@@ -247,6 +250,9 @@ python = "3.12.*"
 gxx_linux-64 = ">=13"
 
 [feature.sglang-cuda.activation.env]
+# 把 nvcc 放进 PATH（sglang 自带 JIT 与 flashinfer 均按 PATH/CUDA_HOME
+# 查找 nvcc）。
+PATH = "$CONDA_PREFIX/sglang-cuda/bin:$PATH"
 # flashinfer（get_cuda_path）的 nvcc/头文件来源。
 # sglang-cuda-prepare 生成的标准 CUDA toolkit 布局。
 CUDA_HOME = "$CONDA_PREFIX/sglang-cuda"
