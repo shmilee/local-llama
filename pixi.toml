@@ -60,7 +60,8 @@ libgomp = "*"
 # 让 CMake 优先在 pixi 环境内查找依赖，而不是系统路径
 CMAKE_PREFIX_PATH = "$CONDA_PREFIX"
 # llama.cpp 版本号（对应 GitHub release tag）
-LLAMACPP_VERSION = "b11224"
+# 从 b10909 到 b11224 出现 decode 回退，速率变慢，待上游修复
+LLAMACPP_VERSION = "b10909"
 # 注意：LLAMACPP_BACKEND 只在各后端 feature 中定义
 # （pixi 多个 feature 定义同名环境变量时，feature 列表靠前者获胜，
 #   base 里绝不能定义该变量，否则会静默覆盖 backend feature 的值）
