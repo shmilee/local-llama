@@ -14,18 +14,22 @@ if [ ! -d "$SP/cu13/bin" ]; then
     exit 1
 fi
 
+# 计算相对路径：从目录 $1 到目标 $2，用作 symlink 目标
+rel() { realpath -m --relative-to="$1" "$2"; }
+
 mkdir -p "$ROOT"
-ln -sfn "$SP/cu13/bin" "$ROOT/bin"
-ln -sfn "$SP/cu13/include" "$ROOT/include"
-ln -sfn "$SP/cu13/lib" "$ROOT/lib"
+ln -sfn "$(rel "$ROOT" "$SP/cu13/bin")" "$ROOT/bin"
+ln -sfn "$(rel "$ROOT" "$SP/cu13/include")" "$ROOT/include"
+ln -sfn "$(rel "$ROOT" "$SP/cu13/lib")" "$ROOT/lib"
 # flashinfer 链接用 $CUDA_HOME/lib64（标准 CUDA 布局）
-ln -sfn "$ROOT/lib" "$ROOT/lib64"
+ln -sfn "$(rel "$ROOT" "$ROOT/lib")" "$ROOT/lib64"
 # PyPI 包只有版本化 .so.13，补开发符号链接供 -lcudart 使用
-if [ -f "$SP/cu13/lib/libcudart.so.13" ] && [ ! -e "$SP/cu13/lib/libcudart.so" ]; then
-    ln -s "$SP/cu13/lib/libcudart.so.13" "$SP/cu13/lib/libcudart.so"
+if [ -f "$SP/cu13/lib/libcudart.so.13" ]; then
+    ln -sfn "libcudart.so.13" "$SP/cu13/lib/libcudart.so"
 fi
 # conda ld 搜索路径不含系统库目录，补 stubs/libcuda.so 供 -lcuda 链接
 # （stub 仅链接时使用，运行时 ld.so 按 SONAME 找真实驱动）
+# 这里是唯一使用绝对路径的链接：目标在 pixi 项目目录之外
 mkdir -p "$ROOT/lib64/stubs"
 DRIVER_LIB=""
 for cand in \
