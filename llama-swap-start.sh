@@ -1,4 +1,9 @@
 #!/bin/bash
+# 启动 llama-swap。
+# 目录布局（相对本脚本所在目录）:
+#   bin/llama-swap          二进制命令
+#   config/llama-swap-config-<name>.yaml   配置文件
+#   logs/llama-swap-<name>-<date>.log      运行日志
 
 
 usage() {
@@ -7,7 +12,7 @@ usage() {
     echo "Usage: $0 -n <name> [-p <port>]"
     echo ""
     echo "Options:"
-    echo "  -n <name>    Config name (llama-swap-config-<name>.yaml)"
+    echo "  -n <name>    Config name (config/llama-swap-config-<name>.yaml)"
     echo "  -p <port>    Listen port (default: 12435)"
     echo "  -h           Show this help"
     echo ""
@@ -39,8 +44,16 @@ if [ -z "$CONFIG_NAME" ]; then
     exit 1
 fi
 
-# Resolve config: cwd or script dir (deduplicated)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BIN="$SCRIPT_DIR/bin/llama-swap"
+LOG_DIR="$SCRIPT_DIR/logs"
+LOG_FILE="$LOG_DIR/llama-swap-${CONFIG_NAME}-$(date +%F).log"
+
+# Resolve config: cwd or script dir (deduplicated)
+if [ ! -x "$BIN" ]; then
+    echo "Error: binary not found or not executable: $BIN"
+    exit 1
+fi
 CONFIG_FILE=""
 if [ "$PWD" = "$SCRIPT_DIR" ]; then
     searchPaths=("$PWD")
@@ -48,7 +61,7 @@ else
     searchPaths=("$PWD" "$SCRIPT_DIR")
 fi
 for searchPath in "${searchPaths[@]}"; do
-    candidate="${searchPath}/llama-swap-config-${CONFIG_NAME}.yaml"
+    candidate="${searchPath}/config/llama-swap-config-${CONFIG_NAME}.yaml"
     if [ -f "$candidate" ]; then
         echo "Looking for config '$candidate': Found"
         CONFIG_FILE="$candidate"
@@ -59,17 +72,21 @@ for searchPath in "${searchPaths[@]}"; do
 done
 
 if [ -z "$CONFIG_FILE" ]; then
-    echo "Error: config file not found: llama-swap-config-${CONFIG_NAME}.yaml"
+    echo "Error: config file not found: config/llama-swap-config-${CONFIG_NAME}.yaml"
     exit 1
 fi
 
+mkdir -p "$LOG_DIR"
+
 echo "Starting llama-swap"
+echo "  Binary: $BIN"
 echo "  Config: $CONFIG_FILE"
 echo "  Port:   $PORT"
+echo "  Log:    $LOG_FILE"
 echo "──────────────────────────────"
 
-$SCRIPT_DIR/bin/llama-swap \
+"$BIN" \
     -config "$CONFIG_FILE" \
     -watch-config \
     -listen "127.0.0.1:${PORT}" \
-    | tee llama-swap-${CONFIG_NAME}-$(date +%F).log
+    | tee "$LOG_FILE"
