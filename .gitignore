@@ -1,11 +1,11 @@
-llama.cpp-cuda-sycl/*
-!llama.cpp-cuda-sycl/PKGBUILD*
-!llama.cpp-cuda-sycl/.SRCINFO
-!llama.cpp-cuda-sycl/.nvchecker.toml
-!llama.cpp-cuda-sycl/llama.cpp.conf
-!llama.cpp-cuda-sycl/llama.cpp.service
-
+# 下载文件
 download/*
+
+# 二进制命令, 如 llama-swap
+bin/
+
+# 日志
+logs/
 
 # pixi environments
 .pixi/*
