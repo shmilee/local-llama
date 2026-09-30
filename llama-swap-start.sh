@@ -81,8 +81,8 @@ mkdir -p "$LOG_DIR"
 echo "Starting llama-swap"
 echo "  Binary: $BIN"
 echo "  Config: $CONFIG_FILE"
-echo "  Port:   $PORT"
 echo "  Log:    $LOG_FILE"
+echo "  Port:   $PORT"
 echo "──────────────────────────────"
 
 "$BIN" \
