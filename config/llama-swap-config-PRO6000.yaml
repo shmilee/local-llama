@@ -191,21 +191,34 @@ macros:
 
   # vLLM（pixi 环境 vllm-cuda，PyPI + torch cu130，见 docs/pixi-environments.md）
   # 参数测试：
+  #  * --enable-per-request-metrics：启用后，vLLM 响应中会包含usage、metrics 对象
+  #    这些信息可用于 llama-swap  计算解码速率等。
+  #  * --per-request-spec-decode-metrics：在 API 响应里返回请求的投机解码统计信息
   #  * --max-num-seqs：设置引擎最大并发处理序列数，多余的请求会在等待池中排队
   #  * --tensor-parallel-size：指定张量并行大小，即模型在多少个GPU上进行切分并行计算。
   #    1 表示不使用张量并行，模型在单个GPU上运行
   #  * --kv-cache-dtype fp8：设置 KV缓存的数据类型为 fp8
+  #  * --enable-prefix-caching：复用已计算好的 KV cache，跳过重复 prefill，默认启用
+  #  * --prefix-match-unit：prefill 缓存键的最细 token 边界。
+  #    越小，前缀匹配越精细，缓存命中率越高，但元数据开销越大。
+  #    前缀缓存对 Mamba 混合模型的行为边界（Qwen3.8-27B）见 docs/vllm.md。
   "default-vllm": >
     pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
     --host 127.0.0.1 --port ${PORT}
+    --enable-per-request-metrics
+    --enable-prompt-tokens-details
+    --per-request-spec-decode-metrics summary
     --max-num-seqs 8
     --tensor-parallel-size 1
     --kv-cache-dtype fp8
+    --enable-prefix-caching
+    --prefix-match-unit 64
 
   # SGLang（pixi 环境 sglang-cuda，PyPI + torch cu130，见 docs/pixi-environments.md）
   "default-sglang": >
     pixi run -m ${env.HOME}/local-llama -e sglang-cuda sglang serve
     --host 127.0.0.1 --port ${PORT}
+    --enable-metrics
 
   # Example of environment variable macros
   # - ${env.VAR_NAME} pulls the value from the system environment
@@ -530,9 +543,6 @@ models:
   # 3. 27B vLLM 后端（FP8）
   # - 参数参考: https://recipes.vllm.ai/Qwen/Qwen3.8-27B
   # - 要点见 docs/vllm.md
-  # 注意: 混合注意力（GDN/线性注意力）模型开 MTP 投机解码时，
-  #       MTP 状态占显存后 Mamba cache blocks 只剩 1016，
-  #       必须同时加 --max-num-seqs 1016，否则 CUDA graph 捕获失败。
   "Qwen3.8-27B-vllm":
     # vLLM 按启动路径注册模型名，须映射到该路径（llama.cpp 不校验 model 字段，无需此项）
     useModelName: "${models_dir}/Qwen3.8-27B-FP8"
@@ -545,7 +555,6 @@ models:
       --enable-auto-tool-choice
       --tool-call-parser qwen3_xml
       --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
-      --max-num-seqs 1016
     env:
       - "CUDA_VISIBLE_DEVICES=2"
     description: "Dense model (27B) from Aliyun Qwen, FP8, vLLM backend"

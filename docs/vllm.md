@@ -38,6 +38,33 @@ vllm serve <model> \
 * 集群单卡实测（96G）：权重 ~28.5G，KV 池 ~170 万 tokens，
   262k 上下文可并发 6.5x。
 
+## 前缀缓存（Mamba 混合模型的行为边界）
+
+Qwen3.8-27B 是混合注意力模型（16 层全注意力 + 48 层 GDN 线性注意力）。
+启用 prefix caching 时 vLLM 自动置 `mamba_cache_mode=align`，并把块大小抬到
+1600 tokens（"attention page size >= mamba page size"，由 mamba 状态字节数
+决定的内存最优值；不能用 `--mamba-block-size` 调小——attention 页会被
+padding 到 mamba 页大小，浪费显存）。
+
+* `--prefix-match-unit 64`：只控制前缀缓存键的**匹配粒度**（每 64 tokens 算
+  一个 hash 键，允许在物理块内部命中），不控制 mamba 状态的存储频率。
+  不设置时默认取 KV cache 各组块大小的 GCD（本模型 = 1600）。
+  集群单卡实测同一 3828-token 长前缀的重复请求：默认命中 1600 tokens（42%），
+  设 64 命中 3712（97%）——多轮对话场景每次请求少重算约 2100 tokens。
+  开销仅为 hash 元数据（262k 序列约 4096 条），不影响显存与计算；
+  取值须整除各组块大小（1600 % 64 = 0），否则启动时报错。
+* mamba 状态检查点只在 prefill 分块边界与 prompt 末尾注册，且 vLLM 不缓存
+  prompt 的最后一段（防截断污染）。因此：
+  **短 prompt（不足 2 个完整 64-token 单元，约 <128 tokens）的重复请求
+  无法命中前缀缓存**——`cached_tokens=0`、日志 hit rate 恒 0%，属预期行为；
+  长共享前缀（多轮对话历史、共享 system prompt、RAG 上下文）命中正常。
+* 集群单卡实测：3828-token 共享前缀的重复请求第二次命中 3712 tokens（97%）；
+  81-token 短 prompt 重复请求命中 0。
+* `--enable-mamba-fine-grained-prefix-cache`：在**当前请求**已命中的共享前缀
+  交界处额外注册 mamba 检查点（需 MTP 投机解码 + prefix-match-unit 小于
+  mamba 块大小）。对短 prompt 的重复请求不产生检查点（首次请求没有命中，
+  交界处为 0），长前缀命中与不加时相同——不默认启用。
+
 ## 环境内工具链的关键点
 
 1. **nvcc 必须在 PATH 里**：vLLM 的 `has_flashinfer()` 用
