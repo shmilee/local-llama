@@ -92,7 +92,7 @@ performance:
 # - optional, default: 5800
 # - the ${PORT} macro can be used in model.cmd and model.proxy settings
 # - it is automatically incremented for every model that uses it
-startPort: 10001
+startPort: 16000
 
 # sendLoadingState: inject loading status updates into the reasoning (thinking)
 # field
