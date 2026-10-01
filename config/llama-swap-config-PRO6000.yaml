@@ -215,10 +215,15 @@ macros:
     --prefix-match-unit 64
 
   # SGLang（pixi 环境 sglang-cuda，PyPI + torch cu130，见 docs/pixi-environments.md）
+  # 参数测试：
+  #  * --enable-metrics：Prometheus /metrics 端点（进程级指标）
+  #  * --enable-cache-report：在 OpenAI 响应的 usage.prompt_tokens_details
+  #    返回 cached_tokens，供 llama-swap 统计 Cached 列
   "default-sglang": >
     pixi run -m ${env.HOME}/local-llama -e sglang-cuda sglang serve
     --host 127.0.0.1 --port ${PORT}
     --enable-metrics
+    --enable-cache-report
 
   # Example of environment variable macros
   # - ${env.VAR_NAME} pulls the value from the system environment
@@ -599,6 +604,13 @@ models:
   #    这比 bfloat16 精度更高，结果更准确，但会占用更多显存。
   #  * --reasoning-parser qwen3: 启用针对 Qwen3 模型的推理内容解析器。
   #  * --tool-call-parser qwen3_coder: 启用针对 Qwen3-Coder 系列模型的工具调用（Tool Call）解析器。
+  #  * --speculative-algorithm NEXTN: 投机解码，使用 checkpoint 内置的 MTP 头
+  #    （无需独立 draft 模型）。NEXTN 是 EAGLE 的别名，同一算法。
+  #    官方 cookbook（Qwen3.8-27B 页）推荐组合：3 步草稿、topk 1、每轮验证 4 个
+  #    候选 token（3 草稿 + 1 目标）。MTP 与 FlashInfer 搭配要求 flashinfer
+  #    比 0.6.15.post1 新（prefill plan 支持 uniform_q_len），本环境 0.6.18 满足。
+  #  * --mamba-track-interval（默认 256）须 ≥ speculative-num-draft-tokens，
+  #    默认值满足，无需显式指定。
   "Qwen3.8-27B-sglang":
     # SGLang 按 --model-path 注册模型名，须映射到该路径
     useModelName: "${models_dir}/Qwen3.8-27B-FP8"
@@ -615,6 +627,10 @@ models:
       --mamba-ssm-dtype bfloat16
       --reasoning-parser qwen3
       --tool-call-parser qwen3_coder
+      --speculative-algorithm NEXTN
+      --speculative-num-steps 3
+      --speculative-eagle-topk 1
+      --speculative-num-draft-tokens 4
     env:
       - "CUDA_VISIBLE_DEVICES=2"
     description: "Dense model (27B) from Aliyun Qwen, FP8, SGLang backend"

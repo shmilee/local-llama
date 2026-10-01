@@ -34,6 +34,28 @@ sglang serve --model-path <model> \
 * MTP：checkpoint 自带 MTP 权重时，sglang 有 NEXTN 投机预设（无需 draft
   模型）；注意投机解码场景下 `--max-running-requests` 会被投机钩子钳到
   48，需要更高并发时显式指定。
+  官方 cookbook（Qwen3.8-27B 页）推荐组合：
+  `--speculative-algorithm NEXTN --speculative-num-steps 3
+  --speculative-eagle-topk 1 --speculative-num-draft-tokens 4`
+  （NEXTN 是 EAGLE 的别名，同一算法；MTP 与 FlashInfer 搭配要求
+  flashinfer 比 0.6.15.post1 新）。Qwen3.8-27B-FP8 单卡 96G 实测：
+  解码 56 → ~190 t/s（接受率 79%，平均接受长度 3.37 token/轮，
+  接受率随内容波动）。`--mamba-track-interval`（默认 256）须 ≥
+  speculative-num-draft-tokens，默认值满足。
+
+## 逐请求统计（llama-swap 集成）
+
+* `--enable-cache-report`（在 `default-sglang` 宏里）：在 OpenAI 响应返回
+  `usage.prompt_tokens_details.cached_tokens`，llama-swap 的 Cached 列
+  依赖该字段；不加则 `prompt_tokens_details` 为 null，统计显示 "-"。
+* radix cache 对短 prompt 也能命中（如 81-token prompt 命中 64），
+  与 vLLM 的 mamba 1600-token 块限制不同（见 docs/vllm.md）。
+* SGLang 的 OpenAI 响应**不含逐请求时延字段**（无 ttft/itl/throughput；
+  llama.cpp 有 `timings` 对象、vLLM 有 `metrics` 对象，SGLang 两者皆无），
+  投机解码统计在 `sglext.spec_tokens_details`（请求级
+  `return_spec_tokens_details` 开启）。llama-swap（v260，上游 main 亦同）
+  只解析后两种格式，故 SGLang 后端的 Prefill/Decode 速率与 Drafted 列
+  无数据来源，llama-swap 侧显示 unknown / "-"。
 
 ## 混合注意力（GDN）模型的关键点
 
