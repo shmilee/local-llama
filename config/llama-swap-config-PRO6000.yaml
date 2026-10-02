@@ -19,7 +19,7 @@
 # healthCheckTimeout: number of seconds to wait for a model to be ready to serve requests
 # - optional, default: 120
 # - minimum value is 15 seconds, anything less will be set to this value
-healthCheckTimeout: 900  # 15min
+healthCheckTimeout: 1500  # 25min（Flash NVFP4 单卡加载 ~18min：124G 权重 + MTP）
 
 # logLevel: sets the logging value
 # - optional, default: info
@@ -654,25 +654,37 @@ models:
       reranker: false
       context: 262144
 
-  # 5. Flash NVFP4 (133G) vLLM 后端
+  # 5. Flash NVFP4 (124G) vLLM 后端 —— 单卡 PRO6000
+  # - nvidia ModelOpt 混合精度导出；51B N-gram 表（PLE）默认 offload 到 CPU，
+  #   GPU 放 74G 权重；QSA 要求 BF16 主 KV、spec-decode-metrics 要求
+  #   speculative-config，故不复用 default-vllm 宏。详见 docs/vllm.md
   "Qwen3.8-Flash-Next-vllm":
     # vLLM 按启动路径注册模型名，须映射到该路径
     useModelName: "${models_dir}/Qwen3.8-Flash-Next-NVFP4"
     cmd: |
-      ${default-vllm}
+      pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
       ${models_dir}/Qwen3.8-Flash-Next-NVFP4
-      --no-enable-flashinfer-autotune
+      --host 127.0.0.1 --port ${PORT}
+      --quantization modelopt
+      --tensor-parallel-size 1
       --gpu-memory-utilization 0.95
+      --max-model-len ${ctx_256k}
+      --max-num-seqs 4
       --max-num-batched-tokens 8192
       --enable-prefix-caching
       --moe-backend marlin
       --attention-config.indexer_kv_dtype fp8
+      --no-enable-flashinfer-autotune
+      --enable-per-request-metrics
+      --enable-prompt-tokens-details
+      --per-request-spec-decode-metrics summary
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
       --enable-auto-tool-choice
       --tool-call-parser qwen3_coder
       --reasoning-parser qwen3
-      --max-model-len ${ctx_256k}
     env:
-      - "CUDA_VISIBLE_DEVICES=6,7"
+      - "CUDA_VISIBLE_DEVICES=6"
+      - "VLLM_PLE_CPU_OFFLOAD=1"
     description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, vLLM backend"
     metadata:
       port: ${PORT}

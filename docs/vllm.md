@@ -65,6 +65,54 @@ padding 到 mamba 页大小，浪费显存）。
   mamba 块大小）。对短 prompt 的重复请求不产生检查点（首次请求没有命中，
   交界处为 0），长前缀命中与不加时相同——不默认启用。
 
+## Qwen3.8-Flash-Next 单卡（NVFP4，96G）
+
+模型：176B 参数 = 125B 主体（512 experts，每 token 激活 10 个）+ 51B N-gram
+嵌入表（PLE），每 token 激活 6B。GDN + QSA（Qwen Sparse Attention）混合注意力，
+Qwen4 架构的早期预览（`Qwen4ExpForConditionalGeneration`）。
+
+Checkpoint：nvidia ModelOpt 混合精度导出（NVFP4 routed experts + FP8 PLE +
+FP8 MTP），磁盘 124GB，其中 50GB 是 PLE 表。`modules_to_not_convert` 只含
+routed experts——注意力、GDN、共享专家、lm_head、视觉编码器保持高精度。
+
+核心机制——PLE 走 CPU、其余上 GPU：
+
+* `VLLM_PLE_CPU_OFFLOAD=1`（vLLM 0.30 默认开启）：PLE 表驻留 pinned host
+  内存，GPU 经 UVA 异步预取行（架构上 N-gram 层就放在 layer 2，取数与
+  layer 1 计算重叠）。host 内存需 51GB 余量。
+* GPU 放 ~74.75 GiB 权重，其余留给 KV/激活/CUDA graph。单卡 96G 实测
+  （gmu 0.95、bf16 KV、max-num-seqs 4、MTP3）：KV 池 10.17 GiB ≈ 357k
+  tokens，262k 上下文并发 1.36x。单用户足够（并发受上下文长度限制，
+  不受 seqs 限制）。
+* **QSA 要求 BF16 主 KV**：`--kv-cache-dtype fp8` 直接报
+  `NotImplementedError: Qwen4Exp QSA requires a BF16 main KV cache`。
+  这是该条目不复用 `default-vllm` 宏（宏带 fp8 KV）的原因之一。
+* `--quantization modelopt` 必须（nvidia 导出的要求，见 HF 页）。
+* MTP：`--speculative-config '{"method":"mtp","num_speculative_tokens":3}'`。
+  vLLM 提示 num>1 会在同一 MTP 层多次前向（本模型 MTP 单层），接受率可能
+  降低；实测真实问题接受率 77.5%、平均接受长度 3.33/4、解码 135.6 t/s
+  （TTFT ~0.9s）。
+* `--per-request-spec-decode-metrics summary` 要求启用 speculative-config
+  （否则 pydantic 校验直接失败）——这也是不能复用宏的原因。
+* GDN `linear_num_key_heads=16`，TP 必须整除 16：TP∈{1,2,4,8,16}（TP3
+  无效）。稀疏 MoE 单 token 计算量小，无 NVLink 的机器上 TP1 单流比多卡
+  快（kubesimplify 实测 2 卡单流比 4 卡快 26%）。
+* 加载 ~18min（124GB NVMe 读 ~12min + MTP ~4min + graph 捕获）。
+  llama-swap 的 `healthCheckTimeout` 已相应调到 1500。
+* 已知问题（vLLM 0.30.0）：`--reasoning-parser qwen3` 正确剥离思考块并计数
+  `reasoning_tokens`，但响应 `reasoning_content` 为空（答案本身正确），
+  chat UI 看不到思考过程。
+* 第三方 NVFP4 导出（RadixArk）有 TP1 "加载完成但 API 不起"（warmup 死锁）
+  的报告；nvidia 导出实测未复现。
+
+参考：
+
+* 官方 recipe：<https://recipes.vllm.ai/Qwen/Qwen3.8-Flash-Next>
+* nvidia 导出 HF 页（`--quantization modelopt` 要求的出处）：
+  <https://huggingface.co/nvidia/Qwen3.8-Flash-Next-NVFP4>
+* 单卡 RTX PRO 6000 实测：
+  <https://blog.kubesimplify.com/running-qwen3-8-flash-next-on-dgx-spark-and-rtx-pro-6000>
+
 ## 环境内工具链的关键点
 
 1. **nvcc 必须在 PATH 里**：vLLM 的 `has_flashinfer()` 用
