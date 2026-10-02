@@ -43,6 +43,60 @@ sglang serve --model-path <model> \
   接受率随内容波动）。`--mamba-track-interval`（默认 256）须 ≥
   speculative-num-draft-tokens，默认值满足。
 
+## Flash-Next 单卡（NVFP4 + PLE）要点
+
+Qwen3.8-Flash-Next-NVFP4（125B/6B active，nvidia 导出）单卡 96G 布局：
+权重 74.75G + KV 池 7.96G（348k tokens，bf16）+ 激活/工作区，
+`--mem-fraction-static 0.96` 下池后余量 3.9G，覆盖 prefill 峰值
+（官方要求 ≥4G 余量，实测 prefill 峰值 1.5-2.6G）。PLE 表 47.7G
+（fp8）必须离卡：`--ple-offload-embedding`（pinned 后端；file 后端
+要求设备报告 `cudaDevAttrPageableMemoryAccessUsesHostPageTables`，
+PRO 6000 被拒）。PLE pinned 内存计入 cgroup shmem：scheduler
+RSS ~68G，其中 Pss_Shmem ~64G（PLE + loader 共享缓冲）。
+
+* **不传 `--quantization`**：nvidia 导出自动解析 `modelopt_mixed`
+  （日志 "Using ModelOptModelLoader"），显式传 `modelopt_fp4` 不符合
+  官方要求。
+* FP8 MTP experts 自动走 triton（"Fp8MoEMethod has no
+  FLASHINFER_CUTLASS path; using triton"），与官方文档一致。
+* `--max-running-requests 4` + `--max-mamba-cache-size 12`：官方
+  cell 的 16/48 追求并发，KV 池只有 78k；N=4 时 KV 池 348k，
+  262k 全上下文单请求可装（1.33x），与 vLLM 条目 seqs 4 对齐。
+* `--watchdog-timeout 3600`：加载 + MTP + autotune 全程 ~37min，
+  远超默认 300s。
+
+### flashinfer fused_moe JIT 与 systemd-oomd
+
+SM120 上首个 forward 会在进程内用 nvcc 编译 flashinfer CUTLASS
+fused-MoE 模块（~96 个对象文件，分钟级，主机内存分配突发）。
+共享集群上 `user-1004.slice` 在 systemd-oomd 内存压力监控内
+（管理员定制 50% 阈值 / 20s 窗口，`oomctl` 可查）；模型加载后
+cgroup 持有 ~200G（124G 模型文件 cache + 64G PLE shmem + 其他），
+编译突发把 PSI 顶过阈值 → oomd SIGKILL cgroup 内最大进程
+（scheduler）。autotune、graph 捕获、warmup、首个请求都是同一
+编译工作的不同触发点，跳过其中几段只是把触发点后移。
+
+对策：启动服务器前先独立预编译该模块
+（`scripts/sglang-precompile-moe.py`，sglang-cuda 环境内运行）：
+模型未加载，cgroup 无 PLE 质量，编译压力不达阈值；进度按对象
+文件落盘，被中断后重跑即续编。预编译完成后 autotune ~40s、
+graph 捕获 ~2.4s、首请求为纯 forward（秒级）。环境重建或清空
+`~/.cache/sglang` 后需重跑。
+
+模块链接需要 `-lnvrtc`：pip nvidia-cu13 包只有版本化
+`libnvrtc.so.13`，`sglang-cuda-prepare` 补开发符号链接（与
+libcudart 同模式）；旧环境需手动
+`ln -sfn libnvrtc.so.13 $SP/cu13/lib/libnvrtc.so`。
+
+实测（PRO 6000 单卡，2026-10-02）：
+
+* 启动 ~37min（加载 20 + MTP 5 + autotune 0.6 + graph 0.04 + warmup）。
+* KV 池 348,032 tokens（bf16），262k 全上下文可装。
+* 单流解码 ~113 t/s；MTP 接受长度 2.0/step（接受率 ~34%），低于
+  官方 cell 的 3.3（同 checkpoint 在 vLLM 为 3.1）——sglang 0.5.20
+  的 MTP 路径性能差距，待查。
+* 首请求验证：reasoning 分离正常，多步算术正确。
+
 ## 逐请求统计（llama-swap 集成）
 
 * `--enable-cache-report`（在 `default-sglang` 宏里）：在 OpenAI 响应返回

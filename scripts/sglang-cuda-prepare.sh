@@ -48,6 +48,10 @@ ln -sfn "$(rel "$ROOT" "$ROOT/lib")" "$ROOT/lib64"
 if [ -f "$SP/cu13/lib/libcudart.so.13" ]; then
     ln -sfn "libcudart.so.13" "$SP/cu13/lib/libcudart.so"
 fi
+# flashinfer fused_moe 模块链接 -lnvrtc，同样需要未版本化的开发链接
+if [ -f "$SP/cu13/lib/libnvrtc.so.13" ]; then
+    ln -sfn "libnvrtc.so.13" "$SP/cu13/lib/libnvrtc.so"
+fi
 # conda ld 搜索路径不含系统库目录，补 stubs/libcuda.so 供 -lcuda 链接
 # （stub 仅链接时使用，运行时 ld.so 按 SONAME 找真实驱动）
 # 这里是唯一使用绝对路径的链接：目标在 pixi 项目目录之外

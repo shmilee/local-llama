@@ -19,7 +19,7 @@
 # healthCheckTimeout: number of seconds to wait for a model to be ready to serve requests
 # - optional, default: 120
 # - minimum value is 15 seconds, anything less will be set to this value
-healthCheckTimeout: 1500  # 25min（Flash NVFP4 单卡加载 ~18min：124G 权重 + MTP）
+healthCheckTimeout: 3600  # 60min（sglang Flash NVFP4 单卡冷加载实测 ~40min；vLLM ~18min）
 
 # logLevel: sets the logging value
 # - optional, default: info
@@ -707,12 +707,12 @@ models:
   # 6. Flash NVFP4 (133G) SGLang 后端
   "Qwen3.8-Flash-Next-sglang":
     # SGLang 按 --model-path 注册模型名，须映射到该路径
+    # 全新环境首次加载前先跑 scripts/sglang-precompile-moe.py（见 docs/sglang.md）
     useModelName: "${models_dir}/Qwen3.8-Flash-Next-NVFP4"
     cmd: |
       ${default-sglang}
       --model-path ${models_dir}/Qwen3.8-Flash-Next-NVFP4
       --tp 1
-      --quantization modelopt_fp4
       --fp4-gemm-backend flashinfer_cutlass
       --moe-runner-backend flashinfer_cutlass
       --page-size 64
@@ -724,14 +724,17 @@ models:
       --speculative-eagle-topk 1
       --speculative-num-draft-tokens 4
       --mamba-radix-cache-strategy extra_buffer_lazy
-      --max-running-requests 16
-      --max-mamba-cache-size 48
+      --max-running-requests 4
+      --max-mamba-cache-size 12
       --mamba-ssm-dtype bfloat16
       --reasoning-parser qwen3
       --mem-fraction-static 0.96
       --ple-offload-embedding
+      --watchdog-timeout 3600
     env:
-      - "CUDA_VISIBLE_DEVICES=6,7"
+      - "CUDA_VISIBLE_DEVICES=6"
+      - "SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK=1"
+      - "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
     description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, SGLang backend"
     metadata:
       port: ${PORT}
