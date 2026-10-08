@@ -735,6 +735,11 @@ models:
       - "CUDA_VISIBLE_DEVICES=6"
       - "SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK=1"
       - "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
+    filters:
+      setParams:
+        # sglang 逐请求投机解码统计（响应 sglext.spec_tokens_details）；
+        # 本地补丁版 llama-swap 解析入 Drafted 列（见 docs/llama-swap.md）
+        return_spec_tokens_details: true
     description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, SGLang backend"
     metadata:
       port: ${PORT}

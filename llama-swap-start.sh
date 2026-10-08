@@ -85,6 +85,9 @@ echo "  Log:    $LOG_FILE"
 echo "  Port:   $PORT"
 echo "──────────────────────────────"
 
+# 宏命令依赖 pixi；ssh / systemd 拉起的环境 PATH 里未必有
+export PATH="$HOME/.pixi/bin:$PATH"
+
 "$BIN" \
     -config "$CONFIG_FILE" \
     -watch-config \

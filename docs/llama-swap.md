@@ -63,9 +63,11 @@ llama-swap-start.sh                           # 启动脚本
     （llama.cpp 不校验 model 字段，无需此项）。
   - `env`：进程环境变量，如 `CUDA_VISIBLE_DEVICES`。
   - `ttl`：空闲自动卸载（秒）。
+  - `filters.setParams`：对该模型所有请求恒注入的参数
+    （sglang 条目用它注入 `return_spec_tokens_details`）。
   - `filters.setParamsByID`：按 `模型ID[:变体]` 注入请求参数
     （temperature / reasoning-budget / chat-template-kwargs 等），
-    变体名自动成为模型别名。
+    变体名自动成为模型别名；在 setParams 之后应用，可覆盖之。
   - `capabilities` / `timeouts` / `sendLoadingState`：路由与超时行为。
 * `routing`：swap 策略（group / scheduler），决定哪些模型可并存、
   加载新模型时谁被卸载。
@@ -80,9 +82,28 @@ llama-swap-start.sh                           # 启动脚本
 | `Qwen3.8-Flash-Next` | llama.cpp | GGUF UD-IQ4_XS (3 分片) + mmproj |
 | `Qwen3.8-27B-vllm` | vLLM | FP8（~31G，单卡） |
 | `Qwen3.8-27B-sglang` | SGLang | FP8 |
-| `Qwen3.8-Flash-Next-vllm` | vLLM | NVFP4（133G，需多卡 TP） |
-| `Qwen3.8-Flash-Next-sglang` | SGLang | NVFP4（需多卡 TP） |
+| `Qwen3.8-Flash-Next-vllm` | vLLM | NVFP4（单卡 96G） |
+| `Qwen3.8-Flash-Next-sglang` | SGLang | NVFP4（单卡 96G） |
 
-vLLM / SGLang 后端的参数要点见 `docs/vllm.md` / `docs/sglang.md`；
-vLLM/SGLang 条目默认 `CUDA_VISIBLE_DEVICES=1`，NVFP4 条目实际使用时
-需改多卡并同步 TP 参数（见 conf 内注释）。
+vLLM / SGLang 后端的参数要点见 `docs/vllm.md` / `docs/sglang.md`。
+各条目 GPU 分配见 conf `env`（llama.cpp 条目避开 CUDA0 防 CLIP 误用，
+Flash NVFP4 两条目单卡 GPU 6）。
+
+## 本地补丁（sglext 投机解码统计）
+
+* `patches/llama-swap-sglext-v262.patch`：解析 SGLang 的
+  `sglext.spec_tokens_details`（请求级 `return_spec_tokens_details`，
+  conf 的 sglang 条目已经 `filters.setParams` 注入），为 Activity 页
+  Drafted 列提供数据源（spec_num_proposed_drafts → DraftTokens，
+  spec_num_correct_drafts → DraftAccTokens）。上游暂不支持
+  （vLLM spec decode 统计 #1032 为先例）。
+* 构建安装：`bash scripts/llama-swap-build.sh [tag]`——下载固定 tag
+  的官方源码包（缺省 v262，与补丁一致；非 git 克隆）、打补丁、编译、
+  装 `bin/`。源码包与构建位于 `download/`（与 llama.cpp 约定一致，
+  幂等可重跑）；Go 自动安装到 `$HOME/.local/go`，模块走 goproxy.cn。
+  官方预编译二进制不含本补丁，`bin/` 不入库，部署后须跑一次脚本。
+* 上游发新版：先按新 tag 源码重新生成补丁文件（文件名带新 tag），
+  再跑 `bash scripts/llama-swap-build.sh <新tag>`（触点：
+  internal/server/metrics.go 的 parseMetrics/buildMetrics 及测试
+  调用点）。
+* 安装后重启 llama-swap 生效。

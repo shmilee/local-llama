@@ -107,9 +107,12 @@ libcudart 同模式）；旧环境需手动
 * SGLang 的 OpenAI 响应**不含逐请求时延字段**（无 ttft/itl/throughput；
   llama.cpp 有 `timings` 对象、vLLM 有 `metrics` 对象，SGLang 两者皆无），
   投机解码统计在 `sglext.spec_tokens_details`（请求级
-  `return_spec_tokens_details` 开启）。llama-swap（v260，上游 main 亦同）
-  只解析后两种格式，故 SGLang 后端的 Prefill/Decode 速率与 Drafted 列
-  无数据来源，llama-swap 侧显示 unknown / "-"。
+  `return_spec_tokens_details` 开启）。conf 的 sglang 条目已用
+  `filters.setParams` 注入该 flag，响应恒带 `sglext`（llama-swap 对
+  未知字段原样透传，客户端可直接读）。llama-swap（v260，上游 main
+  亦同）只解析前两种格式，故 SGLang 后端的 Prefill/Decode 速率与
+  Drafted 列无数据来源，llama-swap 侧显示 unknown / "-"；本地补丁版
+  llama-swap 解析该字段（见 `docs/llama-swap.md` 本地补丁节）。
 
 ## 混合注意力（GDN）模型的关键点
 

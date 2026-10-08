@@ -1,0 +1,184 @@
+diff -ruN a/internal/server/metrics.go b/internal/server/metrics.go
+--- a/internal/server/metrics.go	2026-10-02 23:47:32.480249296 +0800
++++ b/internal/server/metrics.go	2026-10-03 00:58:27.754995662 +0800
+@@ -231,6 +231,7 @@
+ 		usage := parsed.Get("usage")
+ 		timings := parsed.Get("timings")
+ 		responseMetrics := parsed.Get("metrics")
++		sglext := parsed.Get("sglext")
+ 
+ 		// /infill responses are arrays; timings live in the last element (#463).
+ 		if strings.HasPrefix(r.URL.Path, "/infill") {
+@@ -239,8 +240,8 @@
+ 			}
+ 		}
+ 
+-		if usage.Exists() || timings.Exists() || responseMetrics.Exists() {
+-			if parsedMetrics, err := parseMetrics(modelID, recorder.StartTime(), usage, timings, responseMetrics); err != nil {
++		if usage.Exists() || timings.Exists() || responseMetrics.Exists() || sglext.Exists() {
++			if parsedMetrics, err := parseMetrics(modelID, recorder.StartTime(), usage, timings, responseMetrics, sglext); err != nil {
+ 				mp.logger.Warnf("error parsing metrics: %v, path=%s, recording minimal metrics", err, r.URL.Path)
+ 			} else {
+ 				tm.Tokens = parsedMetrics.Tokens
+@@ -399,6 +400,7 @@
+ 		usage                     gjson.Result
+ 		timings                   gjson.Result
+ 		responseMetrics           gjson.Result
++		sglext                    gjson.Result
+ 	)
+ 
+ 	prefix := []byte("data:")
+@@ -457,18 +459,22 @@
+ 			responseMetrics = m
+ 			hasAny = true
+ 		}
++		if s := parsed.Get("sglext"); s.Exists() {
++			sglext = s
++			hasAny = true
++		}
+ 	}
+ 
+ 	if !hasAny {
+ 		return ActivityLogEntry{}, fmt.Errorf("no valid JSON data found in stream")
+ 	}
+ 
+-	return buildMetrics(modelID, start, inputTokens, outputTokens, cachedTokens, usage, timings, responseMetrics), nil
++	return buildMetrics(modelID, start, inputTokens, outputTokens, cachedTokens, usage, timings, responseMetrics, sglext), nil
+ }
+ 
+-func parseMetrics(modelID string, start time.Time, usage, timings, responseMetrics gjson.Result) (ActivityLogEntry, error) {
++func parseMetrics(modelID string, start time.Time, usage, timings, responseMetrics, sglext gjson.Result) (ActivityLogEntry, error) {
+ 	input, output, cached, _ := extractUsageTokens(usage)
+-	return buildMetrics(modelID, start, input, output, cached, usage, timings, responseMetrics), nil
++	return buildMetrics(modelID, start, input, output, cached, usage, timings, responseMetrics, sglext), nil
+ }
+ 
+ // buildMetrics composes an ActivityLogEntry from accumulated token counts and
+@@ -476,7 +482,7 @@
+ // or vLLM response metrics (rates and speculative decoding counters). TabbyAPI
+ // embeds its rates and total time in the usage block, which supplies base rates
+ // when timings and metrics are absent.
+-func buildMetrics(modelID string, start time.Time, inputTokens, outputTokens, cachedTokens int64, usage, timings, responseMetrics gjson.Result) ActivityLogEntry {
++func buildMetrics(modelID string, start time.Time, inputTokens, outputTokens, cachedTokens int64, usage, timings, responseMetrics, sglext gjson.Result) ActivityLogEntry {
+ 	wallDurationMs := int(time.Since(start).Milliseconds())
+ 	durationMs := wallDurationMs
+ 	tokensPerSecond := -1.0
+@@ -528,6 +534,18 @@
+ 		if drafted.Exists() && accepted.Exists() {
+ 			draftTokens = int(drafted.Int())
+ 			draftAccTokens = int(accepted.Int())
++		}
++	}
++	// SGLang reports speculative decoding counts under
++	// sglext.spec_tokens_details when the request sets
++	// return_spec_tokens_details: true. Both counters are required,
++	// mirroring the vLLM block above.
++	if spec := sglext.Get("spec_tokens_details"); spec.Exists() {
++		drafted := spec.Get("spec_num_proposed_drafts")
++		accepted := spec.Get("spec_num_correct_drafts")
++		if drafted.Exists() && accepted.Exists() {
++			draftTokens = int(drafted.Int())
++			draftAccTokens = int(accepted.Int())
+ 		}
+ 	}
+ 	if timeToFirstToken := responseMetrics.Get("time_to_first_token_ms"); timeToFirstToken.Exists() && timeToFirstToken.Float() > 0 {
+diff -ruN a/internal/server/metrics_test.go b/internal/server/metrics_test.go
+--- a/internal/server/metrics_test.go	2026-10-02 23:47:32.480249296 +0800
++++ b/internal/server/metrics_test.go	2026-10-03 00:58:27.754995662 +0800
+@@ -20,7 +20,7 @@
+ func TestServer_ParseMetrics_ChatCompletions(t *testing.T) {
+ 	body := `{"usage":{"prompt_tokens":12,"completion_tokens":7,"prompt_tokens_details":{"cached_tokens":4}}}`
+ 	parsed := gjson.Parse(body)
+-	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"))
++	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"), parsed.Get("sglext"))
+ 	if err != nil {
+ 		t.Fatalf("parseMetrics: %v", err)
+ 	}
+@@ -89,7 +89,7 @@
+ func TestServer_ParseMetrics_Timings(t *testing.T) {
+ 	body := `{"timings":{"prompt_n":20,"predicted_n":50,"prompt_per_second":100.0,"predicted_per_second":40.0,"prompt_ms":200,"predicted_ms":1250,"cache_n":8}}`
+ 	parsed := gjson.Parse(body)
+-	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"))
++	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"), parsed.Get("sglext"))
+ 	if err != nil {
+ 		t.Fatalf("parseMetrics: %v", err)
+ 	}
+@@ -107,7 +107,7 @@
+ func TestServer_ParseMetrics_TabbyAPI(t *testing.T) {
+ 	body := `{"id":"chatcmpl-131b9995cd0c40c99e2ce958083ee406","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":83,"prompt_time":2.36,"prompt_tokens_per_sec":35.17,"completion_tokens":192,"completion_time":11.22,"completion_tokens_per_sec":17.11,"total_tokens":275,"total_time":13.63},"model":"SC_6.00bpw_H6_V6"}`
+ 	parsed := gjson.Parse(body)
+-	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"))
++	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"), parsed.Get("sglext"))
+ 	if err != nil {
+ 		t.Fatalf("parseMetrics: %v", err)
+ 	}
+@@ -130,7 +130,7 @@
+ func TestServer_ParseMetrics_TabbyAPINotOverwrittenByTimings(t *testing.T) {
+ 	body := `{"usage":{"prompt_tokens":83,"completion_tokens":192,"prompt_tokens_per_sec":35.17,"completion_tokens_per_sec":17.11},"timings":{"prompt_n":20,"predicted_n":50,"prompt_per_second":100.0,"predicted_per_second":40.0,"prompt_ms":200,"predicted_ms":1250}}`
+ 	parsed := gjson.Parse(body)
+-	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"))
++	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"), parsed.Get("sglext"))
+ 	if err != nil {
+ 		t.Fatalf("parseMetrics: %v", err)
+ 	}
+@@ -197,7 +197,7 @@
+ func TestServer_ParseMetrics_VLLMMetrics(t *testing.T) {
+ 	body := `{"id":"chatcmpl-abc123","object":"chat.completion","usage":{"prompt_tokens":42,"completion_tokens":128,"total_tokens":170,"prompt_tokens_details":{"cached_tokens":20}},"metrics":{"time_to_first_token_ms":85.2,"generation_time_ms":1240.5,"queue_time_ms":12.3,"mean_itl_ms":9.1,"tokens_per_second":103.2}}`
+ 	parsed := gjson.Parse(body)
+-	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"))
++	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"), parsed.Get("sglext"))
+ 	if err != nil {
+ 		t.Fatalf("parseMetrics: %v", err)
+ 	}
+@@ -215,7 +215,7 @@
+ func TestServer_ParseMetrics_VLLMSpeculativeDecoding(t *testing.T) {
+ 	body := `{"id":"chatcmpl-abc123","object":"chat.completion","usage":{"prompt_tokens":42,"completion_tokens":128},"metrics":{"mean_itl_ms":9.1,"speculative_decoding":{"mean_acceptance_length":1.7,"draft_acceptance_rate":0.7,"acceptance_histogram":[6,14],"num_spec_steps":20,"num_accepted_draft_tokens":14,"num_draft_tokens":20,"num_spec_tokens":1}}}`
+ 	parsed := gjson.Parse(body)
+-	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"))
++	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"), parsed.Get("sglext"))
+ 	if err != nil {
+ 		t.Fatalf("parseMetrics: %v", err)
+ 	}
+@@ -229,7 +229,7 @@
+ func TestServer_ParseMetrics_VLLMSpeculativeDecodingPartial(t *testing.T) {
+ 	body := `{"usage":{"prompt_tokens":42,"completion_tokens":128},"metrics":{"speculative_decoding":{"num_draft_tokens":20}}}`
+ 	parsed := gjson.Parse(body)
+-	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"))
++	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"), parsed.Get("sglext"))
+ 	if err != nil {
+ 		t.Fatalf("parseMetrics: %v", err)
+ 	}
+@@ -260,7 +260,7 @@
+ func TestServer_ParseMetrics_TimingsDraftTokensNotOverwritten(t *testing.T) {
+ 	body := `{"timings":{"prompt_n":20,"predicted_n":50,"draft_n":30,"draft_n_accepted":12},"metrics":{"speculative_decoding":{}}}`
+ 	parsed := gjson.Parse(body)
+-	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"))
++	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"), parsed.Get("sglext"))
+ 	if err != nil {
+ 		t.Fatalf("parseMetrics: %v", err)
+ 	}
+@@ -590,7 +590,7 @@
+ 	if arr := parsed.Array(); len(arr) > 0 {
+ 		timings = arr[len(arr)-1].Get("timings")
+ 	}
+-	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), timings, parsed.Get("metrics"))
++	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), timings, parsed.Get("metrics"), parsed.Get("sglext"))
+ 	if err != nil {
+ 		t.Fatalf("parseMetrics: %v", err)
+ 	}
+@@ -635,3 +635,15 @@
+ 		t.Error("RespHeaders not stored; want captureRespHeaders mask")
+ 	}
+ }
++
++func TestServer_ParseMetrics_SGLangSpecTokens(t *testing.T) {
++	body := `{"id":"chatcmpl-1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30},"sglext":{"spec_tokens_details":{"spec_accept_rate":0.3333,"spec_accept_length":1.947,"spec_num_correct_drafts":19,"spec_num_proposed_drafts":57,"spec_verify_ct":19}}}`
++	parsed := gjson.Parse(body)
++	entry, err := parseMetrics("m", time.Now(), parsed.Get("usage"), parsed.Get("timings"), parsed.Get("metrics"), parsed.Get("sglext"))
++	if err != nil {
++		t.Fatalf("parseMetrics: %v", err)
++	}
++	if entry.Tokens.DraftTokens != 57 || entry.Tokens.DraftAccTokens != 19 {
++		t.Fatalf("drafts = %+v", entry.Tokens)
++	}
++}
