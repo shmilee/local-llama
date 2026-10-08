@@ -39,6 +39,10 @@ platforms = [
 # https://pixi.prefix.dev/latest/workspace/environment/#activation
 [target.unix.activation.env]
 PIXI_CHANGE_PS1 = "true"
+# 隔离 Python user-site（~/.local）包：user-site 在 sys.path 中先于环境
+# site-packages，会遮蔽环境内同名包（如 ~/.local 的旧 huggingface_hub
+# 遮蔽环境内版本，导致 transformers import 失败）。
+PYTHONNOUSERSITE = "1"
 
 [pypi-options]
 index-url = "https://pypi.org/simple"
