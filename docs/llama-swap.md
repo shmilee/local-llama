@@ -64,7 +64,8 @@ llama-swap-start.sh                           # 启动脚本
   - `env`：进程环境变量，如 `CUDA_VISIBLE_DEVICES`。
   - `ttl`：空闲自动卸载（秒）。
   - `filters.setParams`：对该模型所有请求恒注入的参数
-    （sglang 条目用它注入 `return_spec_tokens_details`）。
+    （sglang 条目用它注入 `return_spec_tokens_details` 与
+    `stream_options.include_usage`）。
   - `filters.setParamsByID`：按 `模型ID[:变体]` 注入请求参数
     （temperature / reasoning-budget / chat-template-kwargs 等），
     变体名自动成为模型别名；在 setParams 之后应用，可覆盖之。
@@ -91,12 +92,27 @@ Flash NVFP4 两条目单卡 GPU 6）。
 
 ## 本地补丁（sglext 投机解码统计）
 
-* `patches/llama-swap-sglext-v262.patch`：解析 SGLang 的
-  `sglext.spec_tokens_details`（请求级 `return_spec_tokens_details`，
-  conf 的 sglang 条目已经 `filters.setParams` 注入），为 Activity 页
-  Drafted 列提供数据源（spec_num_proposed_drafts → DraftTokens，
-  spec_num_correct_drafts → DraftAccTokens）。上游暂不支持
-  （vLLM spec decode 统计 #1032 为先例）。
+* `patches/llama-swap-sglext-v262.patch`：
+  - 解析 SGLang 的 `sglext.spec_tokens_details`（请求级
+    `return_spec_tokens_details`，conf 的 sglang 条目已经
+    `filters.setParams` 注入），为 Activity 页 Drafted 列提供数据源
+    （spec_num_proposed_drafts → DraftTokens，
+    spec_num_correct_drafts → DraftAccTokens）。上游暂不支持
+    （vLLM spec decode 统计 #1032 为先例）。
+  - 客户端 decode 速率：`responseBodyCopier` 记录首个非空字节写到客户端
+    的时刻（流式响应即实测 TTFT）；后端未上报速率（SGLang 的 OpenAI
+    响应无任何逐请求计时字段）且为流式响应时，`buildMetrics` 回退
+    `output / (总时长 − 首写)`。非流式路径不触发（单次写入发生在末尾，
+    窗口无意义）；Prefill 列不填（首写含排队时间，与后端上报口径不可比）。
+  - `sendLoadingState` 的 loading 流先于真实响应写到客户端，
+    `finishLoading`（router/base.go）随即调 copier 的
+    `ResetFirstWrite()` 重置时钟，冷启动流式请求的 TTFT 仍从首个真实
+    chunk 起算。
+  - 数据源前提：SGLang 流式响应仅当请求带
+    `stream_options: {"include_usage": true}`（OpenAI 惯例）才在末块返回
+    usage；conf 的 sglang 条目经 `setParams` 注入（与
+    `return_spec_tokens_details` 同处），流式请求的 Decode 列与
+    Activity 页 in/out token 数依赖它。
 * 构建安装：`bash scripts/llama-swap-build.sh`——下载固定 tag 的
   官方源码包（TAG/COMMIT 硬编码于脚本，与补丁一致；非 git 克隆）、
   打补丁、npm 构建前端 UI 并以 `embed_ui` tag 嵌入、编译、装 `bin/`
@@ -106,6 +122,7 @@ Flash NVFP4 两条目单卡 GPU 6）。
   官方预编译二进制不含本补丁，`bin/` 不入库，部署后须跑一次脚本。
 * 上游发新版：手动更新脚本 TAG/COMMIT，按新 tag 源码重新生成补丁
   文件（文件名带新 tag），再跑 `bash scripts/llama-swap-build.sh`
-  （触点：internal/server/metrics.go 的 parseMetrics/buildMetrics
-  及测试调用点）。
+  （触点：internal/server/metrics.go 的 responseBodyCopier /
+  processStreamingResponse / parseMetrics / buildMetrics，
+  internal/router/base.go 的 finishLoading，及测试调用点）。
 * 安装后重启 llama-swap 生效。

@@ -638,6 +638,10 @@ models:
         # sglang 逐请求投机解码统计（响应 sglext.spec_tokens_details）；
         # 本地补丁版 llama-swap 解析入 Drafted 列（见 docs/llama-swap.md）
         return_spec_tokens_details: true
+        # sglang 流式响应仅在显式 include_usage 时于末块返回 usage（OpenAI 惯例），
+        # 为 Activity 页 token 数与客户端 decode 速率测量提供数据源
+        stream_options:
+          include_usage: true
     description: "Dense model (27B) from Aliyun Qwen, FP8, SGLang backend"
     aliases:
       # - "Qwen3.6-27B-sglang"
@@ -745,6 +749,10 @@ models:
         # sglang 逐请求投机解码统计（响应 sglext.spec_tokens_details）；
         # 本地补丁版 llama-swap 解析入 Drafted 列（见 docs/llama-swap.md）
         return_spec_tokens_details: true
+        # sglang 流式响应仅在显式 include_usage 时于末块返回 usage（OpenAI 惯例），
+        # 为 Activity 页 token 数与客户端 decode 速率测量提供数据源
+        stream_options:
+          include_usage: true
     description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, SGLang backend"
     metadata:
       port: ${PORT}

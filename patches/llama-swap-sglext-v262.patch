@@ -1,6 +1,14 @@
-diff -ruN a/internal/server/metrics.go b/internal/server/metrics.go
---- a/internal/server/metrics.go	2026-10-02 23:47:32.480249296 +0800
-+++ b/internal/server/metrics.go	2026-10-03 00:58:27.754995662 +0800
+--- a/internal/server/metrics.go	2026-10-03 14:28:28.000000000 +0800
++++ b/internal/server/metrics.go	2026-10-09 01:20:53.156016420 +0800
+@@ -220,7 +220,7 @@
+ 	}
+ 
+ 	if strings.Contains(recorder.Header().Get("Content-Type"), "text/event-stream") {
+-		if parsed, err := processStreamingResponse(modelID, recorder.StartTime(), body); err != nil {
++		if parsed, err := processStreamingResponse(modelID, recorder.StartTime(), recorder.FirstWriteAt(), body); err != nil {
+ 			mp.logger.Warnf("error processing streaming response: %v, path=%s, recording minimal metrics", err, r.URL.Path)
+ 		} else {
+ 			tm.Tokens = parsed.Tokens
 @@ -231,6 +231,7 @@
  		usage := parsed.Get("usage")
  		timings := parsed.Get("timings")
@@ -20,6 +28,15 @@ diff -ruN a/internal/server/metrics.go b/internal/server/metrics.go
  				mp.logger.Warnf("error parsing metrics: %v, path=%s, recording minimal metrics", err, r.URL.Path)
  			} else {
  				tm.Tokens = parsedMetrics.Tokens
+@@ -391,7 +392,7 @@
+ 	return
+ }
+ 
+-func processStreamingResponse(modelID string, start time.Time, body []byte) (ActivityLogEntry, error) {
++func processStreamingResponse(modelID string, start time.Time, firstWrite time.Time, body []byte) (ActivityLogEntry, error) {
+ 	var (
+ 		inputTokens, outputTokens int64
+ 		cachedTokens              int64 = -1
 @@ -399,6 +400,7 @@
  		usage                     gjson.Result
  		timings                   gjson.Result
@@ -43,14 +60,14 @@ diff -ruN a/internal/server/metrics.go b/internal/server/metrics.go
  	}
  
 -	return buildMetrics(modelID, start, inputTokens, outputTokens, cachedTokens, usage, timings, responseMetrics), nil
-+	return buildMetrics(modelID, start, inputTokens, outputTokens, cachedTokens, usage, timings, responseMetrics, sglext), nil
++	return buildMetrics(modelID, start, inputTokens, outputTokens, cachedTokens, usage, timings, responseMetrics, sglext, firstWrite), nil
  }
  
 -func parseMetrics(modelID string, start time.Time, usage, timings, responseMetrics gjson.Result) (ActivityLogEntry, error) {
 +func parseMetrics(modelID string, start time.Time, usage, timings, responseMetrics, sglext gjson.Result) (ActivityLogEntry, error) {
  	input, output, cached, _ := extractUsageTokens(usage)
 -	return buildMetrics(modelID, start, input, output, cached, usage, timings, responseMetrics), nil
-+	return buildMetrics(modelID, start, input, output, cached, usage, timings, responseMetrics, sglext), nil
++	return buildMetrics(modelID, start, input, output, cached, usage, timings, responseMetrics, sglext, time.Time{}), nil
  }
  
  // buildMetrics composes an ActivityLogEntry from accumulated token counts and
@@ -59,16 +76,14 @@ diff -ruN a/internal/server/metrics.go b/internal/server/metrics.go
  // embeds its rates and total time in the usage block, which supplies base rates
  // when timings and metrics are absent.
 -func buildMetrics(modelID string, start time.Time, inputTokens, outputTokens, cachedTokens int64, usage, timings, responseMetrics gjson.Result) ActivityLogEntry {
-+func buildMetrics(modelID string, start time.Time, inputTokens, outputTokens, cachedTokens int64, usage, timings, responseMetrics, sglext gjson.Result) ActivityLogEntry {
++func buildMetrics(modelID string, start time.Time, inputTokens, outputTokens, cachedTokens int64, usage, timings, responseMetrics, sglext gjson.Result, firstWrite time.Time) ActivityLogEntry {
  	wallDurationMs := int(time.Since(start).Milliseconds())
  	durationMs := wallDurationMs
  	tokensPerSecond := -1.0
-@@ -528,6 +534,18 @@
- 		if drafted.Exists() && accepted.Exists() {
- 			draftTokens = int(drafted.Int())
+@@ -530,6 +536,18 @@
  			draftAccTokens = int(accepted.Int())
-+		}
-+	}
+ 		}
+ 	}
 +	// SGLang reports speculative decoding counts under
 +	// sglext.spec_tokens_details when the request sets
 +	// return_spec_tokens_details: true. Both counters are required,
@@ -79,12 +94,64 @@ diff -ruN a/internal/server/metrics.go b/internal/server/metrics.go
 +		if drafted.Exists() && accepted.Exists() {
 +			draftTokens = int(drafted.Int())
 +			draftAccTokens = int(accepted.Int())
- 		}
- 	}
++		}
++	}
  	if timeToFirstToken := responseMetrics.Get("time_to_first_token_ms"); timeToFirstToken.Exists() && timeToFirstToken.Float() > 0 {
-diff -ruN a/internal/server/metrics_test.go b/internal/server/metrics_test.go
---- a/internal/server/metrics_test.go	2026-10-02 23:47:32.480249296 +0800
-+++ b/internal/server/metrics_test.go	2026-10-03 00:58:27.754995662 +0800
+ 		cachedForRate := cachedTokens
+ 		if cachedForRate < 0 {
+@@ -541,6 +559,18 @@
+ 		tokensPerSecond = 1000 / meanInterTokenLatency.Float()
+ 	}
+ 
++	// Client-side decode-rate fallback for backends that report no per-request
++	// rates (SGLang): the window between the first byte written to the client
++	// (the observed time to first token) and the end of the response.
++	// firstWrite is zero on the non-streaming path, whose single write happens
++	// at the end and would make the window meaningless.
++	if tokensPerSecond < 0 && !firstWrite.IsZero() && outputTokens > 0 {
++		decodeMs := wallDurationMs - int(firstWrite.Sub(start).Milliseconds())
++		if decodeMs > 0 {
++			tokensPerSecond = float64(outputTokens) / (float64(decodeMs) / 1000)
++		}
++	}
++
+ 	return ActivityLogEntry{
+ 		Timestamp: time.Now(),
+ 		Model:     modelID,
+@@ -603,6 +633,7 @@
+ 	status      int
+ 	wroteHeader bool
+ 	start       time.Time
++	firstWrite  time.Time
+ }
+ 
+ func newBodyCopier(w http.ResponseWriter) *responseBodyCopier {
+@@ -617,6 +648,9 @@
+ }
+ 
+ func (w *responseBodyCopier) Write(b []byte) (int, error) {
++	if len(b) > 0 && w.firstWrite.IsZero() {
++		w.firstWrite = time.Now()
++	}
+ 	if !w.wroteHeader {
+ 		w.WriteHeader(http.StatusOK)
+ 	}
+@@ -676,3 +710,13 @@
+ 
+ func (w *responseBodyCopier) Status() int          { return w.status }
+ func (w *responseBodyCopier) StartTime() time.Time { return w.start }
++
++// FirstWriteAt reports the time the first non-empty write reached the
++// client. For streaming responses this is the observed time to first
++// token; it is zero for responses that never wrote a body.
++func (w *responseBodyCopier) FirstWriteAt() time.Time { return w.firstWrite }
++
++// ResetFirstWrite restarts the first-write clock so that bytes written
++// before the call (e.g. the loading-state stream that precedes a model
++// load) do not count toward the time to first token.
++func (w *responseBodyCopier) ResetFirstWrite() { w.firstWrite = time.Time{} }
+--- a/internal/server/metrics_test.go	2026-10-03 14:28:28.000000000 +0800
++++ b/internal/server/metrics_test.go	2026-10-09 01:20:53.157016420 +0800
 @@ -20,7 +20,7 @@
  func TestServer_ParseMetrics_ChatCompletions(t *testing.T) {
  	body := `{"usage":{"prompt_tokens":12,"completion_tokens":7,"prompt_tokens_details":{"cached_tokens":4}}}`
@@ -121,6 +188,33 @@ diff -ruN a/internal/server/metrics_test.go b/internal/server/metrics_test.go
  	if err != nil {
  		t.Fatalf("parseMetrics: %v", err)
  	}
+@@ -143,7 +143,7 @@
+ 	body := []byte("data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n" +
+ 		"data: {\"id\":\"chatcmpl-131b9995cd0c40c99e2ce958083ee406\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":83,\"prompt_time\":2.36,\"prompt_tokens_per_sec\":35.17,\"completion_tokens\":192,\"completion_time\":11.22,\"completion_tokens_per_sec\":17.11,\"total_tokens\":275,\"total_time\":13.63},\"model\":\"SC_6.00bpw_H6_V6\"}\n\n" +
+ 		"data: [DONE]\n\n")
+-	entry, err := processStreamingResponse("m", time.Now(), body)
++	entry, err := processStreamingResponse("m", time.Now(), time.Time{}, body)
+ 	if err != nil {
+ 		t.Fatalf("processStreamingResponse: %v", err)
+ 	}
+@@ -162,7 +162,7 @@
+ 	body := []byte("data: {\"choices\":[{}]}\n\n" +
+ 		"data: {\"usage\":{\"prompt_tokens\":15,\"completion_tokens\":33}}\n\n" +
+ 		"data: [DONE]\n\n")
+-	entry, err := processStreamingResponse("m", time.Now(), body)
++	entry, err := processStreamingResponse("m", time.Now(), time.Time{}, body)
+ 	if err != nil {
+ 		t.Fatalf("processStreamingResponse: %v", err)
+ 	}
+@@ -176,7 +176,7 @@
+ 
+ data: [DONE]
+ `)
+-	entry, err := processStreamingResponse("m", time.Now(), body)
++	entry, err := processStreamingResponse("m", time.Now(), time.Time{}, body)
+ 	if err != nil {
+ 		t.Fatalf("processStreamingResponse: %v", err)
+ 	}
 @@ -197,7 +197,7 @@
  func TestServer_ParseMetrics_VLLMMetrics(t *testing.T) {
  	body := `{"id":"chatcmpl-abc123","object":"chat.completion","usage":{"prompt_tokens":42,"completion_tokens":128,"total_tokens":170,"prompt_tokens_details":{"cached_tokens":20}},"metrics":{"time_to_first_token_ms":85.2,"generation_time_ms":1240.5,"queue_time_ms":12.3,"mean_itl_ms":9.1,"tokens_per_second":103.2}}`
@@ -148,6 +242,15 @@ diff -ruN a/internal/server/metrics_test.go b/internal/server/metrics_test.go
  	if err != nil {
  		t.Fatalf("parseMetrics: %v", err)
  	}
+@@ -246,7 +246,7 @@
+ 
+ data: [DONE]
+ `)
+-	entry, err := processStreamingResponse("m", time.Now(), body)
++	entry, err := processStreamingResponse("m", time.Now(), time.Time{}, body)
+ 	if err != nil {
+ 		t.Fatalf("processStreamingResponse: %v", err)
+ 	}
 @@ -260,7 +260,7 @@
  func TestServer_ParseMetrics_TimingsDraftTokensNotOverwritten(t *testing.T) {
  	body := `{"timings":{"prompt_n":20,"predicted_n":50,"draft_n":30,"draft_n_accepted":12},"metrics":{"speculative_decoding":{}}}`
@@ -157,6 +260,15 @@ diff -ruN a/internal/server/metrics_test.go b/internal/server/metrics_test.go
  	if err != nil {
  		t.Fatalf("parseMetrics: %v", err)
  	}
+@@ -270,7 +270,7 @@
+ }
+ 
+ func TestServer_ProcessStreamingResponse_NoData(t *testing.T) {
+-	if _, err := processStreamingResponse("m", time.Now(), []byte("data: [DONE]\n\n")); err == nil {
++	if _, err := processStreamingResponse("m", time.Now(), time.Time{}, []byte("data: [DONE]\n\n")); err == nil {
+ 		t.Fatal("expected error for stream with no usage data")
+ 	}
+ }
 @@ -590,7 +590,7 @@
  	if arr := parsed.Array(); len(arr) > 0 {
  		timings = arr[len(arr)-1].Get("timings")
@@ -166,7 +278,7 @@ diff -ruN a/internal/server/metrics_test.go b/internal/server/metrics_test.go
  	if err != nil {
  		t.Fatalf("parseMetrics: %v", err)
  	}
-@@ -635,3 +635,15 @@
+@@ -635,3 +635,40 @@
  		t.Error("RespHeaders not stored; want captureRespHeaders mask")
  	}
  }
@@ -182,3 +294,43 @@ diff -ruN a/internal/server/metrics_test.go b/internal/server/metrics_test.go
 +		t.Fatalf("drafts = %+v", entry.Tokens)
 +	}
 +}
++
++func TestServer_ProcessStreamingResponse_ClientDecodeRate(t *testing.T) {
++	body := []byte("data: {\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":100,\"total_tokens\":110}}\n\n")
++	start := time.Now().Add(-4 * time.Second)
++	firstWrite := time.Now().Add(-2 * time.Second)
++	entry, err := processStreamingResponse("m", start, firstWrite, body)
++	if err != nil {
++		t.Fatalf("processStreamingResponse: %v", err)
++	}
++	// 100 tokens over the ~2s window between the first write and the end.
++	if got := entry.Tokens.TokensPerSecond; got < 45 || got > 55 {
++		t.Fatalf("TokensPerSecond = %v, want ~50", got)
++	}
++}
++
++func TestServer_ProcessStreamingResponse_NoFirstWriteKeepsUnknown(t *testing.T) {
++	body := []byte("data: {\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":100,\"total_tokens\":110}}\n\n")
++	entry, err := processStreamingResponse("m", time.Now(), time.Time{}, body)
++	if err != nil {
++		t.Fatalf("processStreamingResponse: %v", err)
++	}
++	if entry.Tokens.TokensPerSecond != -1 {
++		t.Fatalf("TokensPerSecond = %v, want -1 without a first write", entry.Tokens.TokensPerSecond)
++	}
++}
+--- a/internal/router/base.go	2026-10-03 14:28:28.000000000 +0800
++++ b/internal/router/base.go	2026-10-09 01:20:53.160016420 +0800
+@@ -574,6 +574,12 @@
+ 				lw.sendError(streamErr)
+ 			}
+ 			lw.release()
++			// The loading stream's first bytes reached the client before the
++			// model was ready, so they are not the time to first token.
++			// Restart the first-write clock before the real response starts.
++			if reset, ok := w.(interface{ ResetFirstWrite() }); ok {
++				reset.ResetFirstWrite()
++			}
+ 		}
+ 	}
+ 

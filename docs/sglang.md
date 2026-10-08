@@ -112,7 +112,11 @@ libcudart 同模式）；旧环境需手动
   未知字段原样透传，客户端可直接读）。llama-swap（v260，上游 main
   亦同）只解析前两种格式，故 SGLang 后端的 Prefill/Decode 速率与
   Drafted 列无数据来源，llama-swap 侧显示 unknown / "-"；本地补丁版
-  llama-swap 解析该字段（见 `docs/llama-swap.md` 本地补丁节）。
+  llama-swap 解析该字段并加客户端 decode 速率测量（流式：首写时刻≈TTFT，
+  见 `docs/llama-swap.md` 本地补丁节）。Decode 列另依赖流式 usage：
+  SGLang 仅当请求带 `stream_options: {"include_usage": true}` 才在末块
+  返回 usage，conf 的 sglang 条目已经 `setParams` 注入。Prefill 列仍无
+  数据来源（首写含排队，口径与后端上报不可比，有意不填）。
 
 ## 混合注意力（GDN）模型的关键点
 
