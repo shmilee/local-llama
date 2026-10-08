@@ -633,6 +633,11 @@ models:
       --speculative-num-draft-tokens 4
     env:
       - "CUDA_VISIBLE_DEVICES=2"
+    filters:
+      setParams:
+        # sglang 逐请求投机解码统计（响应 sglext.spec_tokens_details）；
+        # 本地补丁版 llama-swap 解析入 Drafted 列（见 docs/llama-swap.md）
+        return_spec_tokens_details: true
     description: "Dense model (27B) from Aliyun Qwen, FP8, SGLang backend"
     aliases:
       # - "Qwen3.6-27B-sglang"
