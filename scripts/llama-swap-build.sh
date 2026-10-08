@@ -6,7 +6,8 @@
 #   TAG/COMMIT 硬编码于下方，与补丁针对的版本绑定（同补丁文件名）；
 #   上游发新版后：手动更新 TAG/COMMIT，按新 tag 重新生成补丁文件，再运行。
 #   幂等，可重复执行；源码包与构建位于 download/（与 llama.cpp 约定一致）；
-#   go 优先用 PATH 中的系统 go，回退 $HOME/.local/go（缺失时自动下载）。
+#   go 优先用 PATH 中的系统 go，回退 $HOME/.local/go（缺失时自动下载）；
+#   依赖 npm 构建前端 UI（官方二进制带 UI，见下方 UI 构建步骤）。
 # 安装后重启 llama-swap 进程生效。
 set -eu
 
@@ -20,6 +21,9 @@ BIN="$REPO_ROOT/bin/llama-swap"
 GO_MIN="1.27.1"      # go.mod 的 go 指令
 GO_VERSION="1.27.1"  # fallback 缺失时安装的版本
 GO_LOCAL="$HOME/.local/go"
+NODE_MIN="22.12.0"       # vite 8 engines: ^20.19.0 || >=22.12.0（取更简的阈值）
+NODE_VERSION="22.23.3"   # fallback 缺失时安装的版本
+NODE_LOCAL="$HOME/.local/node"
 
 if [ ! -f "$PATCH" ]; then
     echo "FATAL: 补丁文件不存在: $PATCH" >&2
@@ -92,12 +96,48 @@ else
     fi
 fi
 
+# --- 构建前端 UI（官方二进制带 UI：源码包内 ui_dist 为空，
+#     需 npm 构建后用 embed_ui tag 嵌入，见 upstream Makefile 的 ui 目标）---
+if [ ! -f "$SRC_DIR/internal/server/ui_dist/index.html" ]; then
+    # node 三级：系统 node（>= NODE_MIN）→ $NODE_LOCAL → 自动下载
+    node_usable() {
+        command -v node >/dev/null 2>&1 || return 1
+        local ver
+        ver="$(node --version | sed 's/^v//')"
+        [ "$(printf '%s\n%s\n' "$NODE_MIN" "$ver" | sort -V | head -n1)" = "$NODE_MIN" ]
+    }
+    if node_usable; then
+        echo "==> 使用系统 node $(node --version)"
+    elif [ -x "$NODE_LOCAL/bin/node" ]; then
+        echo "==> 系统 node 不可用，使用 $NODE_LOCAL"
+        export PATH="$NODE_LOCAL/bin:$PATH"
+    else
+        echo "==> 系统 node 不可用，安装 Node $NODE_VERSION 到 $NODE_LOCAL（镜像）"
+        mkdir -p "$DL_DIR" "$NODE_LOCAL"
+        curl -fL --retry 3 -o "$DL_DIR/node-v$NODE_VERSION-linux-x64.tar.xz" \
+            "https://mirrors.aliyun.com/nodejs-release/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" \
+            || curl -fL --retry 3 -o "$DL_DIR/node-v$NODE_VERSION-linux-x64.tar.xz" \
+            "https://npmmirror.com/mirrors/node/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz"
+        tar -xJf "$DL_DIR/node-v$NODE_VERSION-linux-x64.tar.xz" -C "$NODE_LOCAL" --strip-components=1
+        export PATH="$NODE_LOCAL/bin:$PATH"
+    fi
+    if ! command -v npm >/dev/null 2>&1; then
+        echo "FATAL: npm 不存在（构建前端 UI 需要）" >&2
+        exit 1
+    fi
+    echo "==> 构建 UI（npm install + npm run build）"
+    if [ ! -d "$SRC_DIR/ui/node_modules" ]; then
+        (cd "$SRC_DIR/ui" && npm install)
+    fi
+    (cd "$SRC_DIR/ui" && npm run build)
+fi
+
 # --- 编译（在源码目录内，产物输出到源码目录根）---
 # 版本信息注入（与 goreleaser 官方构建相同的 main 包 -X 变量；
 # tag 源码包无 git 信息，commit 用硬编码值）
 BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "==> 编译"
-(cd "$SRC_DIR" && go build \
+(cd "$SRC_DIR" && go build -tags embed_ui \
     -ldflags "-X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$BUILD_DATE" \
     -o llama-swap .)
 

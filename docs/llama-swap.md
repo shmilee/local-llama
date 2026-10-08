@@ -99,9 +99,10 @@ Flash NVFP4 两条目单卡 GPU 6）。
   （vLLM spec decode 统计 #1032 为先例）。
 * 构建安装：`bash scripts/llama-swap-build.sh`——下载固定 tag 的
   官方源码包（TAG/COMMIT 硬编码于脚本，与补丁一致；非 git 克隆）、
-  打补丁、编译、装 `bin/`（版本串显示 `<tag>-patched`）。源码包与
-  构建位于 `download/`（与 llama.cpp 约定一致，幂等可重跑）；go
-  优先用 PATH 中的系统 go，回退 `$HOME/.local/go`；模块走 goproxy.cn。
+  打补丁、npm 构建前端 UI 并以 `embed_ui` tag 嵌入、编译、装 `bin/`
+  （版本串显示 `<tag>-patched`）。源码包与构建位于 `download/`
+  （与 llama.cpp 约定一致，幂等可重跑）；go/node 均优先用 PATH 中的
+  系统版本，回退 `$HOME/.local/{go,node}`；模块走 goproxy.cn。
   官方预编译二进制不含本补丁，`bin/` 不入库，部署后须跑一次脚本。
 * 上游发新版：手动更新脚本 TAG/COMMIT，按新 tag 源码重新生成补丁
   文件（文件名带新 tag），再跑 `bash scripts/llama-swap-build.sh`
