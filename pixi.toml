@@ -41,8 +41,8 @@ platforms = [
 PIXI_CHANGE_PS1 = "true"
 
 [pypi-options]
-#index-url = "https://pypi.org/simple"
-index-url = "https://mirrors.ustc.edu.cn/pypi/simple"
+index-url = "https://pypi.org/simple"
+#index-url = "https://mirrors.ustc.edu.cn/pypi/simple"
 #index-url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
 
 # torch 系 cu130 wheel 从国内镜像取（等价 pip --find-links）：
