@@ -2,9 +2,9 @@
 # 构建 llama-swap 本地补丁版：下载固定 tag 的官方源码包（非 git 克隆），
 # 打本地补丁，编译，安装到 bin/（官方预编译二进制不含本补丁）。
 #
-# 用法: bash scripts/llama-swap-build.sh [tag]
-#   tag 缺省 = 补丁针对的版本（与补丁文件名绑定，两者须一致）；
-#   上游发新版后，先按新 tag 生成/更新补丁文件，再以新 tag 运行本脚本。
+# 用法: bash scripts/llama-swap-build.sh
+#   TAG/COMMIT 硬编码于下方，与补丁针对的版本绑定（同补丁文件名）；
+#   上游发新版后：手动更新 TAG/COMMIT，按新 tag 重新生成补丁文件，再运行。
 #   幂等，可重复执行；源码包与构建位于 download/（与 llama.cpp 约定一致）；
 #   go 优先用 PATH 中的系统 go，回退 $HOME/.local/go（缺失时自动下载）。
 # 安装后重启 llama-swap 进程生效。
@@ -12,7 +12,9 @@ set -eu
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DL_DIR="$REPO_ROOT/download"
-TAG="${1:-v262}"  # 固定 tag，须与补丁针对的版本一致
+TAG="v262"             # 补丁基于的官方 tag
+COMMIT="079c35a"       # 该 tag 的 commit 短 SHA
+VERSION="${TAG}-patched"  # 版本串标记本地补丁
 PATCH="$REPO_ROOT/patches/llama-swap-sglext-$TAG.patch"
 BIN="$REPO_ROOT/bin/llama-swap"
 GO_MIN="1.27.1"      # go.mod 的 go 指令
@@ -91,8 +93,13 @@ else
 fi
 
 # --- 编译（在源码目录内，产物输出到源码目录根）---
+# 版本信息注入（与 goreleaser 官方构建相同的 main 包 -X 变量；
+# tag 源码包无 git 信息，commit 用硬编码值）
+BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "==> 编译"
-(cd "$SRC_DIR" && go build -o llama-swap .)
+(cd "$SRC_DIR" && go build \
+    -ldflags "-X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$BUILD_DATE" \
+    -o llama-swap .)
 
 # --- 安装 ---
 echo "==> 安装 $BIN"

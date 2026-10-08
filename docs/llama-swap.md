@@ -97,13 +97,14 @@ Flash NVFP4 两条目单卡 GPU 6）。
   Drafted 列提供数据源（spec_num_proposed_drafts → DraftTokens，
   spec_num_correct_drafts → DraftAccTokens）。上游暂不支持
   （vLLM spec decode 统计 #1032 为先例）。
-* 构建安装：`bash scripts/llama-swap-build.sh [tag]`——下载固定 tag
-  的官方源码包（缺省 v262，与补丁一致；非 git 克隆）、打补丁、编译、
-  装 `bin/`。源码包与构建位于 `download/`（与 llama.cpp 约定一致，
-  幂等可重跑）；Go 自动安装到 `$HOME/.local/go`，模块走 goproxy.cn。
+* 构建安装：`bash scripts/llama-swap-build.sh`——下载固定 tag 的
+  官方源码包（TAG/COMMIT 硬编码于脚本，与补丁一致；非 git 克隆）、
+  打补丁、编译、装 `bin/`（版本串显示 `<tag>-patched`）。源码包与
+  构建位于 `download/`（与 llama.cpp 约定一致，幂等可重跑）；go
+  优先用 PATH 中的系统 go，回退 `$HOME/.local/go`；模块走 goproxy.cn。
   官方预编译二进制不含本补丁，`bin/` 不入库，部署后须跑一次脚本。
-* 上游发新版：先按新 tag 源码重新生成补丁文件（文件名带新 tag），
-  再跑 `bash scripts/llama-swap-build.sh <新tag>`（触点：
-  internal/server/metrics.go 的 parseMetrics/buildMetrics 及测试
-  调用点）。
+* 上游发新版：手动更新脚本 TAG/COMMIT，按新 tag 源码重新生成补丁
+  文件（文件名带新 tag），再跑 `bash scripts/llama-swap-build.sh`
+  （触点：internal/server/metrics.go 的 parseMetrics/buildMetrics
+  及测试调用点）。
 * 安装后重启 llama-swap 生效。
