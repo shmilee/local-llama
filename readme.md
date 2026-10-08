@@ -7,6 +7,7 @@
 ## 目录结构
 
 ```
+.envrc                     direnv：pixi/rattler 缓存隔离到项目专属目录
 pixi.toml / pixi.lock      pixi 环境定义（三个推理环境）+ lock
 scripts/                   pixi task 脚本（build/verify/prepare）
 config/                    llama-swap 配置文件（PRO6000 / T14p）
@@ -16,6 +17,9 @@ logs/                      llama-swap 运行日志（不入库）
 docs/                      文档
 TODO.md                    待办跟踪
 ```
+
+> `.envrc` 依赖 [direnv](https://direnv.net) 生效：安装后在 shell 初始化中
+> 加载（zsh：`eval "$(direnv hook zsh)"`），首次进入目录执行 `direnv allow`。
 
 ## 快速上手
 
