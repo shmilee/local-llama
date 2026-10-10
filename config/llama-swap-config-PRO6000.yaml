@@ -495,7 +495,7 @@ models:
       --load-mode mmap+mlock --flash-attn on --fit off
       --cache-type-k q8_0 --cache-type-v q8_0
       --kv-unified
-      --ubatch-size 4096
+      --ubatch-size 256
       --cache-ram 12288
       --ctx-size ${ctx_256k}
       --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/froggeric-v22.5.jinja
@@ -505,6 +505,7 @@ models:
     #  --spec-type draft-mtp --spec-draft-n-max 2
     env:
       - "CUDA_VISIBLE_DEVICES=5"
+      - "GGML_CUDA_CUBLAS_COMPUTE_TYPE=fp32"
     description: "MoE model (125B/6B active) from Aliyun Qwen"
     aliases:
       # - "Qwen3.8-Flash-Next"  # 保留旧模型名称，历史统计原地保留
