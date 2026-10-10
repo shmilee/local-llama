@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鹈鹕骑自行车 · Pelican Riding a Bicycle</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    background: #0d2236;
+    font-family: "Segoe UI", "PingFang SC", system-ui, sans-serif;
+    overflow: hidden;
+  }
+  svg {
+    display: block;
+    border-radius: 18px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.45);
+    width: min(96vw, 96vh * 1.333);
+    height: auto;
+  }
+  /* drifting clouds & parallax bushes */
+  .cloud  { animation: drift var(--dur, 38s) linear infinite; animation-delay: var(--delay, 0s); }
+  .bush   { animation: drift calc(var(--dur, 38s) * 1.6) linear infinite; animation-delay: var(--delay, 0s); }
+  .hill   { animation: drift calc(var(--dur, 38s) * 2.4) linear infinite; animation-delay: var(--delay, 0s); }
+  @keyframes drift { from { transform: translateX(0); } to { transform: translateX(-1500px); } }
+  /* scrolling road dashes */
+  .roadline { animation: dash 0.7s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: 60; } }
+  /* eye blink */
+  .lid { animation: blink 4.2s infinite; transform-origin: 368px 172px; }
+  @keyframes blink {
+    0%, 46%, 54%, 100% { transform: scaleY(0); }
+    50% { transform: scaleY(1); }
+  }
+  /* sun rays gentle spin */
+  .rays { animation: spin 40s linear infinite; transform-origin: 690px 90px; transform-box: view-box; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A pelican riding a bicycle">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6ec3e8"/>
+      <stop offset="0.6" stop-color="#a7dcf2"/>
+      <stop offset="1" stop-color="#ddf3fb"/>
+    </linearGradient>
+    <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff3b0"/>
+      <stop offset="0.55" stop-color="#ffd166"/>
+      <stop offset="1" stop-color="#ffd166" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fce6b"/>
+      <stop offset="1" stop-color="#5aa23e"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7a8794"/>
+      <stop offset="1" stop-color="#5a6672"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e7edf2"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ===================== SKY ===================== -->
+  <rect x="0" y="0" width="800" height="600" fill="url(#sky)"/>
+
+  <!-- sun -->
+  <g>
+    <circle cx="690" cy="90" r="70" fill="url(#sunGlow)"/>
+    <g class="rays" fill="#ffd166">
+      <g>
+        <rect x="688" y="4"  width="4" height="16" rx="2"/>
+        <rect x="688" y="158" width="4" height="16" rx="2"/>
+        <rect x="602" y="88" width="16" height="4" rx="2"/>
+        <rect x="762" y="88" width="16" height="4" rx="2"/>
+        <rect x="628" y="26" width="4" height="16" rx="2" transform="rotate(45 630 34)"/>
+        <rect x="748" y="138" width="4" height="16" rx="2" transform="rotate(45 750 146)"/>
+        <rect x="628" y="138" width="4" height="16" rx="2" transform="rotate(-45 630 146)"/>
+        <rect x="748" y="26" width="4" height="16" rx="2" transform="rotate(-45 750 34)"/>
+      </g>
+    </g>
+    <circle cx="690" cy="90" r="38" fill="#ffd166"/>
+    <circle cx="690" cy="90" r="38" fill="none" stroke="#f5b62e" stroke-width="2"/>
+  </g>
+
+  <!-- clouds -->
+  <g class="cloud" style="--dur:42s; --delay:0s" transform="translate(900,70)">
+    <g fill="#ffffff" opacity="0.95">
+      <ellipse cx="0" cy="0" rx="42" ry="24"/>
+      <ellipse cx="30" cy="-12" rx="34" ry="22"/>
+      <ellipse cx="-32" cy="-6" rx="30" ry="18"/>
+    </g>
+  </g>
+  <g class="cloud" style="--dur:55s; --delay:-18s" transform="translate(1100,140)">
+    <g fill="#ffffff" opacity="0.85">
+      <ellipse cx="0" cy="0" rx="36" ry="20"/>
+      <ellipse cx="26" cy="-10" rx="28" ry="18"/>
+      <ellipse cx="-28" cy="-4" rx="26" ry="15"/>
+    </g>
+  </g>
+  <g class="cloud" style="--dur:34s; --delay:-8s" transform="translate(980,200)">
+    <g fill="#ffffff" opacity="0.7">
+      <ellipse cx="0" cy="0" rx="30" ry="16"/>
+      <ellipse cx="22" cy="-8" rx="24" ry="14"/>
+    </g>
+  </g>
+
+  <!-- distant hills -->
+  <g class="hill" style="--dur:90s">
+    <path d="M0,420 Q100,360 220,420 Z" fill="#bfe0a9"/>
+    <path d="M160,420 Q320,350 480,420 Z" fill="#a9d68c"/>
+    <path d="M420,420 Q600,362 800,420 Z" fill="#bfe0a9"/>
+  </g>
+
+  <!-- grass -->
+  <rect x="0" y="420" width="800" height="72" fill="url(#grass)"/>
+
+  <!-- bushes -->
+  <g class="bush" style="--dur:55s; --delay:0s" transform="translate(940,440)">
+    <circle cx="0" cy="0" r="20" fill="#6fbf4a"/>
+    <circle cx="18" cy="-6" r="16" fill="#7cc65a"/>
+    <circle cx="-16" cy="-4" r="14" fill="#63b140"/>
+  </g>
+  <g class="bush" style="--dur:70s; --delay:-25s" transform="translate(1060,450)">
+    <circle cx="0" cy="0" r="16" fill="#63b140"/>
+    <circle cx="14" cy="-4" r="12" fill="#7cc65a"/>
+  </g>
+
+  <!-- road -->
+  <rect x="0" y="492" width="800" height="108" fill="url(#road)"/>
+  <line x1="0" y1="492" x2="800" y2="492" stroke="#4a5560" stroke-width="3"/>
+  <line class="roadline" x1="0" y1="552" x2="800" y2="552" stroke="#f4f6f7" stroke-width="5" stroke-dasharray="36 24"/>
+
+  <!-- shadow under bike -->
+  <ellipse cx="380" cy="496" rx="190" ry="12" fill="#000" opacity="0.18"/>
+
+  <!-- ===================== BICYCLE ===================== -->
+  <!-- rear wheel -->
+  <g>
+    <circle cx="250" cy="430" r="62" fill="none" stroke="#2b2f36" stroke-width="9"/>
+    <circle cx="250" cy="430" r="55" fill="none" stroke="#c7d0d8" stroke-width="2.5"/>
+    <g id="rearSpokes" stroke="#9aa6b0" stroke-width="1.8">
+      <line x1="250" y1="372" x2="250" y2="488"/>
+      <line x1="192" y1="430" x2="308" y2="430"/>
+      <line x1="209" y1="389" x2="291" y2="471"/>
+      <line x1="291" y1="389" x2="209" y2="471"/>
+    </g>
+    <circle cx="250" cy="430" r="8" fill="#2b2f36"/>
+    <circle cx="250" cy="430" r="8" fill="none" stroke="#c7d0d8" stroke-width="2"/>
+  </g>
+
+  <!-- front wheel -->
+  <g>
+    <circle cx="520" cy="430" r="62" fill="none" stroke="#2b2f36" stroke-width="9"/>
+    <circle cx="520" cy="430" r="55" fill="none" stroke="#c7d0d8" stroke-width="2.5"/>
+    <g id="frontSpokes" stroke="#9aa6b0" stroke-width="1.8">
+      <line x1="520" y1="372" x2="520" y2="488"/>
+      <line x1="462" y1="430" x2="578" y2="430"/>
+      <line x1="479" y1="389" x2="561" y2="471"/>
+      <line x1="561" y1="389" x2="479" y2="471"/>
+    </g>
+    <circle cx="520" cy="430" r="8" fill="#2b2f36"/>
+    <circle cx="520" cy="430" r="8" fill="none" stroke="#c7d0d8" stroke-width="2"/>
+  </g>
+
+  <!-- far leg (behind frame) -->
+  <line id="thighB" x1="308" y1="312" x2="360" y2="390" stroke="#e0863a" stroke-width="9" stroke-linecap="round"/>
+  <line id="shinB"  x1="360" y1="390" x2="360" y2="456" stroke="#e0863a" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- frame -->
+  <g fill="none" stroke="#e63946" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="300" y1="300" x2="505" y2="296"/> <!-- top tube -->
+    <line x1="360" y1="434" x2="505" y2="296"/> <!-- down tube -->
+    <line x1="300" y1="300" x2="360" y2="434"/> <!-- seat tube -->
+    <line x1="360" y1="434" x2="250" y2="430"/> <!-- chainstay -->
+    <line x1="300" y1="300" x2="250" y2="430"/> <!-- seat stay -->
+    <line x1="505" y1="296" x2="505" y2="316"/> <!-- head tube -->
+    <line x1="505" y1="316" x2="520" y2="430"/> <!-- fork -->
+  </g>
+  <!-- seat -->
+  <g>
+    <line x1="300" y1="300" x2="300" y2="286" stroke="#c7d0d8" stroke-width="5"/>
+    <ellipse cx="300" cy="284" rx="22" ry="8" fill="#2b2f36"/>
+  </g>
+  <!-- handlebar -->
+  <g fill="none" stroke="#2b2f36" stroke-width="6" stroke-linecap="round">
+    <line x1="505" y1="296" x2="505" y2="282"/>
+    <path d="M505,282 Q530,278 536,288"/>
+  </g>
+  <!-- chainring + crank arms + chain -->
+  <g>
+    <line x1="250" y1="422" x2="360" y2="416" stroke="#3a3f46" stroke-width="4"/>
+    <line x1="250" y1="438" x2="360" y2="452" stroke="#3a3f46" stroke-width="4"/>
+    <circle cx="250" cy="430" r="8" fill="#3a3f46"/>
+    <g id="crank">
+      <circle cx="360" cy="434" r="18" fill="none" stroke="#2b2f36" stroke-width="4"/>
+      <circle cx="360" cy="434" r="4" fill="#2b2f36"/>
+      <circle cx="360" cy="420" r="2.4" fill="#c7d0d8"/>
+      <circle cx="360" cy="448" r="2.4" fill="#c7d0d8"/>
+      <line x1="360" y1="434" x2="360" y2="412" stroke="#2b2f36" stroke-width="6" stroke-linecap="round"/>
+      <line x1="360" y1="434" x2="360" y2="456" stroke="#2b2f36" stroke-width="6" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <!-- near leg -->
+  <line id="thighA" x1="308" y1="312" x2="360" y2="390" stroke="#f4a261" stroke-width="9" stroke-linecap="round"/>
+  <line id="shinA"  x1="360" y1="390" x2="360" y2="456" stroke="#f4a261" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- pedals + feet (near side, kept horizontal) -->
+  <g id="footA">
+    <rect x="-12" y="-2" width="24" height="7" rx="3" fill="#2b2f36"/>
+    <path d="M-3,-2 L7,-13 L17,-9 L23,-4 L16,-2 L8,-1 Z" fill="#f2872e" stroke="#d96b1f" stroke-width="1.5" stroke-linejoin="round"/>
+  </g>
+  <g id="footB">
+    <rect x="-12" y="-2" width="24" height="7" rx="3" fill="#2b2f36"/>
+    <path d="M-3,-2 L7,-13 L17,-9 L23,-4 L16,-2 L8,-1 Z" fill="#e0863a" stroke="#c46a1d" stroke-width="1.5" stroke-linejoin="round"/>
+  </g>
+
+  <!-- ===================== PELICAN ===================== -->
+  <g id="torso">
+    <!-- tail -->
+    <g fill="#dde4ea">
+      <path d="M235,250 Q200,238 195,226 Q216,238 238,246 Z"/>
+      <path d="M238,256 Q200,252 196,244 Q214,252 240,258 Z"/>
+    </g>
+    <!-- wing (flaps) -->
+    <g id="wing">
+      <path d="M318,244 Q276,232 238,250 Q262,266 300,266 Q316,266 318,244 Z" fill="#c3ced8"/>
+      <path d="M306,248 Q272,242 248,252 Q268,258 300,258 Z" fill="#d5dee6"/>
+    </g>
+    <!-- body -->
+    <ellipse cx="288" cy="252" rx="62" ry="44" fill="url(#body)" transform="rotate(-12 288 252)"/>
+    <!-- neck -->
+    <path d="M322,226 Q338,200 350,186" fill="none" stroke="#f6f7f5" stroke-width="26" stroke-linecap="round"/>
+    <ellipse cx="300" cy="238" rx="22" ry="12" fill="#f6f7f5"/>
+    <!-- head -->
+    <circle cx="358" cy="178" r="24" fill="#f6f7f5"/>
+    <circle cx="358" cy="178" r="24" fill="none" stroke="#e2e6ea" stroke-width="1.5"/>
+    <!-- eye -->
+    <circle cx="368" cy="172" r="4.6" fill="#1c1c1c"/>
+    <circle cx="369.6" cy="170.4" r="1.7" fill="#ffffff"/>
+    <ellipse class="lid" cx="368" cy="172" rx="6" ry="5.4" fill="#f6f7f5"/>
+    <!-- beak -->
+    <path d="M364,168 L448,184 L374,192 Z" fill="#f2872e"/>
+    <path d="M374,192 L448,184 C442,212 428,224 404,225 C384,226 366,214 362,198 Z" fill="#f6b93b"/>
+    <path d="M448,184 L374,192" stroke="#d96b1f" stroke-width="1.5"/>
+  </g>
+</svg>
+
+<script>
+(function () {
+  const HIP    = [308, 312];
+  const CRANK  = [360, 434];
+  const RC     = 22;      // crank radius
+  const L1     = 72;      // thigh length
+  const L2     = 84;      // shin length
+  const REAR   = [250, 430];
+  const FRONT  = [520, 430];
+  const SPEED  = 6.0;     // radians per second
+
+  const crank    = document.getElementById('crank');
+  const rearSpk  = document.getElementById('rearSpokes');
+  const frontSpk = document.getElementById('frontSpokes');
+  const torso    = document.getElementById('torso');
+  const wing     = document.getElementById('wing');
+
+  const thighA = document.getElementById('thighA');
+  const shinA  = document.getElementById('shinA');
+  const footA  = document.getElementById('footA');
+  const thighB = document.getElementById('thighB');
+  const shinB  = document.getElementById('shinB');
+  const footB  = document.getElementById('footB');
+
+  // two-bone inverse kinematics: return knee position with knee biased forward (+x)
+  function ik(hip, foot) {
+    const dx = foot[0] - hip[0], dy = foot[1] - hip[1];
+    const d  = Math.hypot(dx, dy) || 1e-6;
+    const a  = (L1 * L1 - L2 * L2 + d * d) / (2 * d);
+    const h  = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+    const mx = hip[0] + (a / d) * dx;
+    const my = hip[1] + (a / d) * dy;
+    const nx = -dy / d, ny = dx / d;
+    const k1 = [mx + h * nx, my + h * ny];
+    const k2 = [mx - h * nx, my - h * ny];
+    return k1[0] >= k2[0] ? k1 : k2; // pick forward knee
+  }
+
+  function setLine(el, a, b) {
+    el.setAttribute('x1', a[0]); el.setAttribute('y1', a[1]);
+    el.setAttribute('x2', b[0]); el.setAttribute('y2', b[1]);
+  }
+  function setLeg(thigh, shin, footEl, foot) {
+    const knee = ik(HIP, foot);
+    setLine(thigh, HIP, knee);
+    setLine(shin, knee, foot);
+    footEl.setAttribute('transform', 'translate(' + foot[0] + ',' + foot[1] + ')');
+  }
+
+  let angle = 0;
+  let last  = performance.now();
+
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    angle += dt * SPEED;
+
+    const foot1 = [CRANK[0] + RC * Math.cos(angle),               CRANK[1] + RC * Math.sin(angle)];
+    const foot2 = [CRANK[0] + RC * Math.cos(angle + Math.PI),     CRANK[1] + RC * Math.sin(angle + Math.PI)];
+
+    const deg = angle * 180 / Math.PI;
+
+    // crank + chainring
+    crank.setAttribute('transform', 'rotate(' + deg + ' ' + CRANK[0] + ' ' + CRANK[1] + ')');
+
+    // wheels (rotate clockwise, scaled to crank radius ratio)
+    const wdeg = deg * (RC / 62) * 2.2;
+    rearSpk.setAttribute('transform',  'rotate(' + wdeg + ' ' + REAR[0]  + ' ' + REAR[1] + ')');
+    frontSpk.setAttribute('transform', 'rotate(' + wdeg + ' ' + FRONT[0] + ' ' + FRONT[1] + ')');
+
+    // legs
+    setLeg(thighA, shinA, footA, foot1);
+    setLeg(thighB, shinB, footB, foot2);
+
+    // subtle body bob (twice per pedal revolution)
+    const bob = Math.sin(angle * 2) * 2.5;
+    torso.setAttribute('transform', 'translate(0,' + bob + ')');
+
+    // gentle wing flap
+    const flap = Math.sin(angle * 2) * 4;
+    wing.setAttribute('transform', 'rotate(' + flap + ' 318 244)');
+
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
