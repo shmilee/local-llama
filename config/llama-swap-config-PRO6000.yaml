@@ -485,7 +485,7 @@ models:
   # N-gram offloaded to RAM (mmap), TODO MTP enabled
   "Qwen3.8-Flash-Next":
     cmd: |
-      ${env.HOME}/local-llama/bin/llama-server
+      pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
       --model ${models_dir}/Qwen3.8-Flash-Next/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
       --mmproj ${models_dir}/Qwen3.8-Flash-Next/mmproj-F16.gguf
       --port ${PORT}
@@ -504,7 +504,7 @@ models:
     #  --model-draft ${models_dir}/Qwen3.8-Flash-Next/MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
     #  --spec-type draft-mtp --spec-draft-n-max 2
     env:
-      - "CUDA_VISIBLE_DEVICES=6"
+      - "CUDA_VISIBLE_DEVICES=5"
     description: "MoE model (125B/6B active) from Aliyun Qwen"
     aliases:
       # - "Qwen3.8-Flash-Next"  # 保留旧模型名称，历史统计原地保留
@@ -692,7 +692,7 @@ models:
       --tool-call-parser qwen3_coder
       --reasoning-parser qwen3
     env:
-      - "CUDA_VISIBLE_DEVICES=6"
+      - "CUDA_VISIBLE_DEVICES=5"
       - "VLLM_PLE_CPU_OFFLOAD=1"
     description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, vLLM backend"
     metadata:
@@ -741,7 +741,7 @@ models:
       --ple-offload-embedding
       --watchdog-timeout 3600
     env:
-      - "CUDA_VISIBLE_DEVICES=6"
+      - "CUDA_VISIBLE_DEVICES=5"
       - "SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK=1"
       - "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
     filters:
