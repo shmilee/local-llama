@@ -40,3 +40,33 @@ b11224 decode 吞吐回退，待上游修复）。
 ```
 llama-cli -m XX.gguf --mmproj XX-mmproj-BF16.gguf
 ```
+
+## 长上下文（YaRN 1M）
+
+Qwen3.8-27B 原生上限 262,144，模型卡称 YaRN 可扩至 1,000,000。
+配置见 `config/llama-swap-config-PRO6000.yaml` 的 `Qwen3.8-27B-1m` 条目。
+
+```
+llama-server -m Qwen3.8-27B-UD-Q8_K_XL.gguf \
+  -ngl 999 -c 1000000 -fa on --parallel 1 \
+  --rope-scaling yarn --rope-scale 4 --yarn-orig-ctx 262144 \
+  --override-kv qwen35.context_length=int:1000000 \
+  --cache-type-k q8_0 --cache-type-v q8_0
+```
+
+* **两个动作缺一不可**：`--rope-scaling yarn …` 做 YaRN 频率缩放，
+  `--override-kv qwen35.context_length=int:1000000` 抬高 GGUF 元数据里的
+  `context_length`（原为 262144）。llama.cpp 有硬检查会拒绝超过元数据的
+  `--ctx-size`；只给 `--rope-scaling/--rope-scale` 而不改元数据会被截回 262144。
+* `--rope-scale 4` 即 YaRN factor 4（内部换算为 `rope_freq_scale=1/4`）；
+  `--yarn-orig-ctx 262144` 为模型原生上下文。
+* arch 键名 `qwen35.context_length` 来自同 checkpoint 的实测复现
+  （llama.cpp issue #27090）。若加载时报「键不存在」，需核对 GGUF 实际 arch 前缀。
+* `--override-kv` 只抬高长度上限，不训练模型；长文质量由 YaRN 决定，属损失性扩展。
+* 已知问题：issue #27090 报 CUDA 下 ~520K prefill 静默崩溃（b10434 复现；
+  本仓库当前 b10909 更新，未验证是否已修）。
+* 1M 下 f16 KV 显存不可行（16 个全注意力层），故改用 `q8_0` KV（可再降 q4_0）。
+* 代价：YaRN 静态生效、短 prompt 同样受影响（官方模型卡警告会波及短文本质量）。
+  第三方评测报告与 262k 原生的 mean top-20 KLD ≈ 1e-2（出处见 `docs/vllm.md`
+  长上下文节）。速度下降主要来自上下文变长（decode 要读满 KV）而非 YaRN；
+  公开实测中 1M 与 512K 速度无本质差别。

@@ -38,6 +38,39 @@ vllm serve <model> \
 * 集群单卡实测（96G）：权重 ~28.5G，KV 池 ~170 万 tokens，
   262k 上下文可并发 6.5x。
 
+### 长上下文（YaRN 1M）
+
+Qwen3.8-27B 原生 262,144（模型卡），官方 recipe 支持用 YaRN 扩到 1,000,000。
+配置见 `config/llama-swap-config-PRO6000.yaml` 的 `Qwen3.8-27B-vllm-1m` 条目。
+
+```
+VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 vllm serve ${models_dir}/Qwen3.8-27B-FP8 \
+  --max-model-len 1000000 \
+  --hf-overrides '{"text_config":{"rope_parameters":{
+    "mrope_interleaved":true,"mrope_section":[11,11,10],
+    "rope_type":"yarn","rope_theta":10000000,"partial_rotary_factor":0.25,
+    "factor":4.0,"original_max_position_embeddings":262144}}}' \
+  --reasoning-parser qwen3
+```
+
+* `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` 必须，否则 vLLM 拒绝超过
+  `max_position_embeddings`(262144) 的 `--max-model-len`。
+* override 嵌在 `text_config` 下（2.4T 是扁平的），键名为 `rope_parameters`
+  （模型卡新版写法，非 vLLM 老版的 `rope_scaling`）。
+* `mrope_*` 字段说明该模型是多模态 RoPE（mRoPE）；`partial_rotary_factor`
+  0.25 即只对 1/4 维度做旋转。
+* `factor` 是**静态**缩放，与输入长度无关：仅在确实服务长 prompt 时启用；
+  ~524K 负载可把 `factor` 降到 `2.0`。
+* 显存：262k 实测 KV 池 ~170 万 tokens，1M 单请求可容纳（并发相应降为 ~1.7x）。
+* 代价：YaRN 静态生效，短 prompt 同样受影响（模型卡原文 "potentially impact[s]
+  performance on shorter texts"）。第三方评测（`malaiwah/Qwen3.8-27B-EXL3-K5K6-
+  hydrated` 模型卡）报告 native-262k 与 1M-YaRN 的 mean top-20 KLD ≈ 1e-2
+  （约 9× 启动本底，48 prompt 中 19 个贪心输出改变），其建议为默认仍服务 262k、
+  长上下文另开端点。
+* 速度：下降主要来自「上下文变长 / KV 填满」，与 factor 无关；据公开实测 1M 与
+  512K 无本质差别（decode 随深度持续下滑，prefill 近似腰斩）。
+* 参考：<https://recipes.vllm.ai/Qwen/Qwen3.8-27B>（Processing Ultra-Long Texts）。
+
 ## 前缀缓存（Mamba 混合模型的行为边界）
 
 Qwen3.8-27B 是混合注意力模型（16 层全注意力 + 48 层 GDN 线性注意力）。

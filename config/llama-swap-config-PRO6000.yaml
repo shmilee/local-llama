@@ -234,6 +234,8 @@ macros:
   "ctx_64k": 65536
   "ctx_128k": 131072
   "ctx_256k": 262144
+  # Qwen3.8-27B 原生上限 262144；经 YaRN 可扩展至 1M（见各 -1m 条目）
+  "ctx_1m": 1000000
 
 # apiKeys: require an API key when making requests to inference endpoints
 # - optional, default: []
@@ -481,6 +483,56 @@ models:
       # - must be an integer > 0
       context: 262144
 
+  # 1b. q27b @ 1M —— llama.cpp + YaRN（原生 262144 → 1M）
+  # - 依据：模型卡「262,144 natively and extensible up to 1,000,000 tokens」
+  #   https://huggingface.co/Qwen/Qwen3.8-27B#processing-ultra-long-texts
+  # - GGUF 元数据 context_length 仍为 262144；llama.cpp 有硬检查会拒绝超过
+  #   元数据的 --ctx-size，须用 --override-kv 抬高（同 checkpoint 实测复现，
+  #   llama.cpp issue #27090，b10434；本仓库 b10909 更新）
+  # - YaRN 参数同样取自该复现：rope-scale 4 × yarn-orig-ctx 262144
+  # - 已知问题：issue #27090 报 CUDA 下 ~520K prefill 静默崩溃，仍待上游修复
+  # - 1M 下 f16 KV 显存不可行（16 个全注意力层），按实测改用 q8_0 KV
+  # - 不复用 default-llama 宏：需替换 KV 类型并追加 YaRN/override 参数
+  "Qwen3.8-27B-1m":
+    cmd: |
+      pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
+      --port ${PORT}
+      --n-gpu-layers all --device CUDA0
+      --model ${models_dir}/Qwen3.8-27B/Qwen3.8-27B-UD-Q8_K_XL.gguf
+      --mmproj ${models_dir}/Qwen3.8-27B/mmproj-BF16.gguf
+      --mmproj-offload
+      --load-mode auto --flash-attn on --fit off
+      --cache-type-k q8_0 --cache-type-v q8_0
+      --kv-unified
+      --ubatch-size 4096
+      --ctx-size ${ctx_1m}
+      --rope-scaling yarn --rope-scale 4 --yarn-orig-ctx 262144
+      --override-kv qwen35.context_length=int:1000000
+      --cache-ram 12288
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/peculiar-ragdoll-v22.5.0.jinja
+      --reasoning on --reasoning-format deepseek
+      --spec-type draft-mtp --spec-draft-n-max 3
+    env:
+      - "CUDA_VISIBLE_DEVICES=2"
+    description: "Dense model (27B) from Aliyun Qwen (Thinking), llama.cpp + YaRN, 1M context"
+    metadata:
+      port: ${PORT}
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_1m} (YaRN x4)"
+    ttl: 36000
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 1000000
+
   # 2. q38fn
   # N-gram offloaded to RAM (mmap), TODO MTP enabled
   "Qwen3.8-Flash-Next":
@@ -583,6 +635,47 @@ models:
       tools: true
       reranker: false
       context: 262144
+
+  # 3b. 27B vLLM 后端（FP8）@ 1M —— YaRN via --hf-overrides
+  # - 依据：官方 recipe「Processing Ultra-Long Texts」——native 262k，YaRN 至 1M
+  #   https://recipes.vllm.ai/Qwen/Qwen3.8-27B
+  # - override 嵌在 text_config 下（2.4T 是扁平的），键名 rope_parameters
+  # - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 必须，否则 vLLM 拒绝超过模型最大长度
+  # - factor 为静态缩放：仅在确实服务长 prompt 时使用；~524K 负载可降到 2.0
+  # - 显存：docs/vllm.md 单卡 262k 实测 KV 池 ~170 万 tokens，故 1M 单请求可容纳
+  "Qwen3.8-27B-vllm-1m":
+    useModelName: "${models_dir}/Qwen3.8-27B-FP8"
+    cmd: |
+      ${default-vllm}
+      ${models_dir}/Qwen3.8-27B-FP8
+      --max-model-len ${ctx_1m}
+      --hf-overrides '{"text_config":{"rope_parameters":{"mrope_interleaved":true,"mrope_section":[11,11,10],"rope_type":"yarn","rope_theta":10000000,"partial_rotary_factor":0.25,"factor":4.0,"original_max_position_embeddings":262144}}}'
+      --reasoning-parser qwen3
+      --mm-encoder-tp-mode data
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_xml
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
+    env:
+      - "CUDA_VISIBLE_DEVICES=2"
+      - "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1"
+    description: "Dense model (27B) from Aliyun Qwen, FP8, vLLM backend, YaRN 1M context"
+    metadata:
+      port: ${PORT}
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_1m} (YaRN x4)"
+    ttl: 36000
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 1000000
 
   # 4. 27B SGLang 后端（FP8）
   # - 参数参考: https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.8
@@ -847,7 +940,9 @@ routing:
           # required
           members:
             - "Qwen3.8-27B"
+            - "Qwen3.8-27B-1m"
             - "Qwen3.8-27B-vllm"
+            - "Qwen3.8-27B-vllm-1m"
             - "Qwen3.8-27B-sglang"
 
         "group2":
