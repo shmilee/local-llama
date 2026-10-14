@@ -109,6 +109,57 @@ ${env.HOME}/local-llama/bin/llama-server
 | 10 | 2026-09-12 23:16:28 | ip:127.0.0.1 | 200 | - | 53 | 49 | 107.40 t/s | 88.14 t/s | 1.05s |
 
 
+## Qwen3.8-27B + YaRN 1M context
+
+### cmd
+
+```
+"Qwen3.8-27B-1M":
+    cmd: |
+      pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
+      --port ${PORT}
+      --n-gpu-layers all --device CUDA0
+      --model ${models_dir}/Qwen3.8-27B/Qwen3.8-27B-UD-Q8_K_XL.gguf
+      --mmproj ${models_dir}/Qwen3.8-27B/mmproj-BF16.gguf
+      --mmproj-offload
+      --load-mode auto --flash-attn on --fit off
+      --cache-type-k q8_0 --cache-type-v q8_0
+      --kv-unified
+      --ubatch-size 4096
+      --ctx-size ${ctx_1m}
+      --rope-scaling yarn --rope-scale 4 --yarn-orig-ctx 262144
+      --override-kv qwen35.context_length=int:1000000
+      --cache-ram 12288
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/peculiar-ragdoll-v22.5.0.jinja
+      --reasoning on --reasoning-format deepseek
+      --spec-type draft-mtp --spec-draft-n-max 3
+```
+
+### Memory
+
+* GPU Memory: 82598MiB
+* CPU Memory: 49G
+
+### report
+
+| Summary | |
+| --- | --- |
+| Cached | 1,161,297 |
+| Prompt | 231,260 (1227.25 t/s) |
+| Generated | 6,243 (32.81 t/s) |
+| Drafted | 45.7% 3613/7899 |
+
+| ID | Time | Cached | Prompt | Generated | Drafted | Prefill | Decode | Duration |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 14843 | 2026-10-14 17:17:28 | 234,896 | 234 | 150 | 59.9% (97/162) | 105.83 t/s | 36.33 t/s | 7.21s |
+| 14842 | 2026-10-14 17:17:21 | 233,300 | 1,330 | 265 | 60.0% (171/285) | 408.06 t/s | 36.59 t/s | 11.35s |
+| 14841 | 2026-10-14 17:17:09 | 233,029 | 173 | 99 | 79.3% (69/87) | 88.82 t/s | 44.38 t/s | 5.07s |
+| 14840 | 2026-10-14 17:17:04 | 232,854 | 89 | 86 | 72.8% (59/81) | 46.29 t/s | 41.12 t/s | 4.87s |
+| 14839 | 2026-10-14 17:16:59 | 227,218 | 2,046 | 3,591 | 43.4% (2030/4680) | 332.26 t/s | 31.45 t/s | 121.21s |
+| 14838 | 2026-10-14 17:12:20 | - | 227,222 | 2,018 | 45.2% (1162/2571) | 1318.46 t/s | 33.68 t/s | 233.17s |
+| 14837 | 2026-10-14 16:57:57 | - | 166 | 34 | 75.8% (25/33) | 276.57 t/s | 68.06 t/s | 1.11s |
+
+
 # PRO6000 w/ vLLM and SGLang
 
 ## Qwen3.8-27B-vllm
@@ -158,6 +209,49 @@ ${default-vllm}
 | 8565 | 2026-10-08 17:07:58 | - | 68 | 1,379 | 46.4% (802/1728) | 35.30 t/s | 79.52 t/s | 19.28s |
 | 8564 | 2026-10-08 17:06:05 | 224,512 | 229,290 | 3,293 | 39.7% (1790/4506) | 1635.63 t/s | 61.13 t/s | 57.21s |
 | 8563 | 2026-10-08 17:02:36 | - | 224,613 | 4,638 | 45.0% (2664/5922) | 3335.59 t/s | 65.77 t/s | 138.79s |
+
+## Qwen3.8-27B-vllm + YaRN 1M context
+
+### cmd
+
+```
+${default-vllm}
+      ${models_dir}/Qwen3.8-27B-FP8
+      --max-model-len ${ctx_1m}
+      --hf-overrides '{"text_config":{"rope_parameters":{"mrope_interleaved":true,"mrope_section":[11,11,10],"rope_type":"yarn","rope_theta":10000000,"partial_rotary_factor":0.25,"factor":4.0,"original_max_position_embeddings":262144}}}'
+      --reasoning-parser qwen3
+      --mm-encoder-tp-mode data
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_xml
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
+```
+
+### Memory
+
+* GPU Memory: 91910MiB
+* CPU Memory: 3.7G
+
+### report
+
+| Summary | |
+| --- | --- |
+| Cached | 3,324,992 |
+| Prompt | 3,702,947 (898.96 t/s) |
+| Generated | 12,394 (68.46 t/s) |
+| Drafted | 56.9% 7824/13743 |
+
+| ID | Time | Cached | Prompt | Generated | Drafted | Prefill | Decode | Duration |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 14933 | 2026-10-14 18:41:49 | 376,576 | 377,072 | 190 | 94.7% (142/150) | 709.91 t/s | 95.00 t/s | 4.03s |
+| 14932 | 2026-10-14 18:41:44 | 374,848 | 376,646 | 159 | 71.2% (109/153) | 820.61 t/s | 78.37 t/s | 5.55s |
+| 14931 | 2026-10-14 18:41:39 | 373,888 | 374,943 | 1,623 | 93.5% (1198/1281) | 742.73 t/s | 95.64 t/s | 19.70s |
+| 14930 | 2026-10-14 18:41:19 | 372,288 | 374,003 | 175 | 72.0% (121/168) | 782.68 t/s | 78.16 t/s | 5.66s |
+| 14929 | 2026-10-14 18:41:13 | 369,024 | 372,367 | 1,379 | 62.8% (902/1437) | 1006.82 t/s | 72.61 t/s | 23.54s |
+| 14928 | 2026-10-14 18:40:49 | 367,104 | 369,133 | 3,047 | 50.4% (1834/3642) | 944.12 t/s | 63.46 t/s | 51.37s |
+| 14927 | 2026-10-14 18:39:58 | 366,272 | 367,216 | 289 | 82.3% (205/249) | 807.45 t/s | 87.84 t/s | 5.75s |
+| 14926 | 2026-10-14 18:39:52 | 365,248 | 366,396 | 210 | 74.9% (146/195) | 814.10 t/s | 81.31 t/s | 5.20s |
+| 14925 | 2026-10-14 18:39:46 | 359,744 | 365,363 | 289 | 59.6% (186/312) | 1113.19 t/s | 70.12 t/s | 10.39s |
+| 14924 | 2026-10-14 18:39:36 | - | 359,808 | 5,033 | 48.4% (2981/6156) | 2360.36 t/s | 62.29 t/s | 234.65s |
 
 
 ## Qwen3.8-Flash-Next-vllm

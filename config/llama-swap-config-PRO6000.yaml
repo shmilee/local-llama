@@ -234,7 +234,6 @@ macros:
   "ctx_64k": 65536
   "ctx_128k": 131072
   "ctx_256k": 262144
-  # Qwen3.8-27B 原生上限 262144；经 YaRN 可扩展至 1M（见各 -1m 条目）
   "ctx_1m": 1000000
 
 # apiKeys: require an API key when making requests to inference endpoints
@@ -493,7 +492,7 @@ models:
   # - 已知问题：issue #27090 报 CUDA 下 ~520K prefill 静默崩溃，仍待上游修复
   # - 1M 下 f16 KV 显存不可行（16 个全注意力层），按实测改用 q8_0 KV
   # - 不复用 default-llama 宏：需替换 KV 类型并追加 YaRN/override 参数
-  "Qwen3.8-27B-1m":
+  "Qwen3.8-27B-1M":
     cmd: |
       pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
       --port ${PORT}
@@ -643,7 +642,7 @@ models:
   # - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 必须，否则 vLLM 拒绝超过模型最大长度
   # - factor 为静态缩放：仅在确实服务长 prompt 时使用；~524K 负载可降到 2.0
   # - 显存：docs/vllm.md 单卡 262k 实测 KV 池 ~170 万 tokens，故 1M 单请求可容纳
-  "Qwen3.8-27B-vllm-1m":
+  "Qwen3.8-27B-vllm-1M":
     useModelName: "${models_dir}/Qwen3.8-27B-FP8"
     cmd: |
       ${default-vllm}
@@ -940,9 +939,9 @@ routing:
           # required
           members:
             - "Qwen3.8-27B"
-            - "Qwen3.8-27B-1m"
+            - "Qwen3.8-27B-1M"
             - "Qwen3.8-27B-vllm"
-            - "Qwen3.8-27B-vllm-1m"
+            - "Qwen3.8-27B-vllm-1M"
             - "Qwen3.8-27B-sglang"
 
         "group2":
