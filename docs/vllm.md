@@ -41,7 +41,7 @@ vllm serve <model> \
 ### 长上下文（YaRN 1M）
 
 Qwen3.8-27B 原生 262,144（模型卡），官方 recipe 支持用 YaRN 扩到 1,000,000。
-配置见 `config/llama-swap-config-PRO6000.yaml` 的 `Qwen3.8-27B-vllm-1m` 条目。
+配置见 `config/llama-swap-config-PRO6000.yaml` 的 `Qwen3.8-27B-vllm-1M` 条目。
 
 ```
 VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 vllm serve ${models_dir}/Qwen3.8-27B-FP8 \

@@ -44,7 +44,7 @@ llama-cli -m XX.gguf --mmproj XX-mmproj-BF16.gguf
 ## 长上下文（YaRN 1M）
 
 Qwen3.8-27B 原生上限 262,144，模型卡称 YaRN 可扩至 1,000,000。
-配置见 `config/llama-swap-config-PRO6000.yaml` 的 `Qwen3.8-27B-1m` 条目。
+配置见 `config/llama-swap-config-PRO6000.yaml` 的 `Qwen3.8-27B-1M` 条目。
 
 ```
 llama-server -m Qwen3.8-27B-UD-Q8_K_XL.gguf \
