@@ -79,16 +79,23 @@ llama-swap-start.sh                           # 启动脚本
 | 模型 ID | 后端 | 模型文件 |
 | ------- | ---- | -------- |
 | `Qwen3.8-27B` | llama.cpp | GGUF UD-Q8_K_XL + mmproj |
-| `Qwen3.6-35B-A3B` | llama.cpp | GGUF |
-| `Qwen3.8-Flash-Next` | llama.cpp | GGUF UD-IQ4_XS (3 分片) + mmproj |
+| `Qwen3.8-27B-1M` | llama.cpp（YaRN） | 同上 GGUF，q8_0 KV |
 | `Qwen3.8-27B-vllm` | vLLM | FP8（~31G，单卡） |
+| `Qwen3.8-27B-vllm-1M` | vLLM（YaRN） | 同上 FP8 |
 | `Qwen3.8-27B-sglang` | SGLang | FP8 |
+| `Qwen3.8-Flash-Next` | llama.cpp | GGUF UD-IQ4_XS (3 分片) + mmproj |
 | `Qwen3.8-Flash-Next-vllm` | vLLM | NVFP4（单卡 96G） |
 | `Qwen3.8-Flash-Next-sglang` | SGLang | NVFP4（单卡 96G） |
 
+* `-1M` 变体：同一份权重加 YaRN ×4 外推到 1M 上下文，与 262K 条目是
+  各自独立的进程（互相切换 = 卸载 + 重载）；踩坑见 `docs/llama.cpp.md`
+  与 `docs/vllm.md` 的「长上下文（YaRN 1M）」节。
+* GPU 分配见 conf `env`：27B 家族 GPU 2，Flash-Next 家族 GPU 5，
+  均避开 CUDA0（防 CLIP 误用）。
+* `routing` 两个 group 与家族对应：group1 = 27B 家族（含 1M 变体），
+  group2 = Flash-Next 家族；组内换模型即卸载，两组可并存。
+
 vLLM / SGLang 后端的参数要点见 `docs/vllm.md` / `docs/sglang.md`。
-各条目 GPU 分配见 conf `env`（llama.cpp 条目避开 CUDA0 防 CLIP 误用，
-Flash NVFP4 两条目单卡 GPU 6）。
 
 ## 本地补丁（sglext 投机解码统计）
 
