@@ -85,8 +85,8 @@ group2 内互斥切换，互为 vLLM/llama.cpp 对照）：
 * 显存：单卡 256k 实测 74.4G（`docs/speed-report.md`），1M q8_0 KV ~+15G
   ≈ 90G 偏紧且贴近 #27090 风险区，故双卡层切分（`--device CUDA0,CUDA1`，
   每卡 ~45G）。无 NVLink 时层切分仅残差流跨卡，decode 损耗可忽略。
-* cmd 以 `numactl --cpunodebind=1` 包裹（**不加 `--membind`**，见
-  docs/llama-swap.md「NUMA / CPU 绑定」的 OOM 实测）：N-gram 表
+* cmd 以 `numactl --cpunodebind=1` 包裹（不加 `--membind`，理由见
+  docs/llama-swap.md「NUMA / CPU 绑定」）：N-gram 表
   mmap+mlock ~70G 由默认 local 策略就近落在 node 1（所选卡 4,6 所在
   socket；改选卡时须复核），逐 token 读取不跨 UPI。
 * 全参数与 256k 条目一致（`--ubatch-size 256`、`--n-cpu-moe 0`、

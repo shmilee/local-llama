@@ -112,7 +112,8 @@ routed experts——注意力、GDN、共享专家、lm_head、视觉编码器�
 
 * `VLLM_PLE_CPU_OFFLOAD=1`（vLLM 0.30 默认开启）：PLE 表驻留 pinned host
   内存，GPU 经 UVA 异步预取行（架构上 N-gram 层就放在 layer 2，取数与
-  layer 1 计算重叠）。host 内存需 51GB 余量。
+  layer 1 计算重叠）。host 内存需 51GB 余量（该表按 ETP 切分，TP>1 时
+  每 rank 只需一部分：TP2 实测 ~36G/rank，见「长上下文」节）。
 * GPU 放 ~74.75 GiB 权重，其余留给 KV/激活/CUDA graph。单卡 96G 实测
   （gmu 0.95、bf16 KV、max-num-seqs 4、MTP3）：KV 池 10.17 GiB ≈ 357k
   tokens，262k 上下文并发 1.36x。单用户足够（并发受上下文长度限制，
@@ -151,12 +152,12 @@ routed experts——注意力、GDN、共享专家、lm_head、视觉编码器�
 * `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` 必须，否则 vLLM 拒绝超过原生
   `max_position_embeddings`(262144) 的 `--max-model-len`。
 * 显存：1M 单请求 KV ~29G，单卡（74.75G 权重 + 29G）> 96G 不可行；
-  TP2 每卡权重 ~37G，实测 KV 池 3,904,173 tokens，1M 上下文约可并 3.9 条。
-* cmd 以 `numactl --cpunodebind=1` 包裹，**不加 `--membind=1`**：PLE 表在
-  TP2 下每 rank 各 pin 51G（共 ~102G），严格绑定会在 node 1（128G）OOM
-  ——实测 worker 被 SIGKILL（表现为无 Python traceback 的
-  "Engine core initialization failed"），去掉 membind 即恢复。各参数含义与
-  node 编号查询见 docs/llama-swap.md「NUMA / CPU 绑定」。
+  TP2 每卡权重 ~37G，实测（真实权重）KV 池 3,819,165 tokens，1M 请求
+  并发 3.82×；每卡 GPU ~95G、host ~36G。
+* cmd 以 `numactl --cpunodebind=1` 包裹，不加 `--membind`：PLE 表是 ETP
+  切分的，TP2 下每 rank ~36G（实测 36G+36G），cpunodebind 已让其就近落在
+  node 1；membind 只禁止回退、无额外收益。各参数含义与 node 编号查询见
+  docs/llama-swap.md「NUMA / CPU 绑定」。
 * **TP2 下必须关闭 MTP**（`--load-format dummy` 快速启动实测，三种组合全挂）：
   - `marlin`（现状）：MTP 头 intermediate 被 TP 切到 320，vLLM 把 FP8
     block scale 细化为 [64,64]，MARLIN FP8 不接受 → ValueError（原始报错）；
@@ -169,6 +170,9 @@ routed experts——注意力、GDN、共享专家、lm_head、视觉编码器�
   又是 FP8、只有 Triton 能接受细化后的 block。上游只验证过本模型 TP4 的 MTP。
   故本条目不开 `--speculative-config`，同时去掉强依赖它的
   `--per-request-spec-decode-metrics`（pydantic 校验会失败）。
+  实测（真实权重、无 MTP）decode ~117 t/s、prefill 8.5k–12.2k t/s
+  （705k prompt）；对照 llama.cpp 1M 双卡（~90k 深度）decode ~49 t/s、
+  prefill ~1.2k t/s —— 无 MTP 的 decode 仍约 2× llama.cpp，prefill ~7×。
 * YaRN factor 静态生效，短 prompt 同样受影响；建议长上下文专用端点
   （与 27B 同结论）。
 * QSA 注意力生来面向长上下文：Qwen 报 1M 时 prefill 注意力内核提速

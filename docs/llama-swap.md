@@ -113,22 +113,25 @@ PRO6000 为双路（无 NVLink）：GPU 0-3 挂 NUMA node 0，GPU 4-7 挂 node 1
 * `--cpunodebind=1`：进程全部线程只调度在 node 1 的 CPU 上
   （本机为核 32-63, 96-127）——即 GPU 所连的 socket 侧。内存按默认
   local 策略就近分配（优先 node 1，不足时回退 node 0，不会硬失败）。
-* **不要加 `--membind=1`**（实测会在 node 1 OOM）：严格绑定禁止回退到
-  node 0。vLLM 的 PLE 表在 TP2 下**每 rank 各 pin 51G（共 ~102G）**，
-  node 1 总量仅 128G → 加 membind 后 worker 被 SIGKILL，表面症状是
-  无 Python traceback 的 "Engine core initialization failed"；去掉即
-  `Application startup complete`。
-* 为什么需要绑定：两条目都重度依赖宿主内存——vLLM 的 PLE 表 51G/rank
-  （逐 token 经 UVA 异步预取，N-gram 层特意放在 layer 2 就是为了与
-  layer 1 计算重叠）；llama.cpp 的 N-gram 表 mmap+mlock ~70G。内存若落
-  在对侧 socket，每次读取都过一次 UPI，侵蚀预取重叠的设计收益；而
-  「CPU 绑定 + 默认 local 就近分配」已足以让绝大部分页落在同侧。
+* 不加 `--membind=1`：严格绑定禁止回退到 node 0，徒增硬失败风险，而
+  cpunodebind 已让首次触碰的页落在同侧 node。宿主内存胃口不小——
+  vLLM 的 PLE 表是 **ETP 切分**的（`ngram_embedding.py`："ETP-sharded
+  PLE table"，词表每行只有一个 rank 持有），TP2 下每 rank ~36G
+  （实测 CPU Memory 36G+36G）；llama.cpp 的 N-gram 表 mmap+mlock ~70G
+  + cache-ram 12G；node 1 共 128G。（membind 未单独 A/B 验证过——
+  早前失败探针里它与其他变量同时存在，故此处按"收益/风险"取舍。）
+* 为什么需要绑定：两条目都重度依赖宿主内存——vLLM 的 PLE 表（FP8，
+  切分后 ~36G/rank）逐 token 经 UVA 异步预取，N-gram 层特意放在
+  layer 2 就是为了与 layer 1 计算重叠；llama.cpp 的 N-gram 表
+  mmap+mlock ~70G。内存若落在对侧 socket，每次读取都过一次 UPI，
+  侵蚀预取重叠的设计收益；而「CPU 绑定 + 默认 local 就近分配」已足以
+  让绝大部分页落在同侧。
 * NUMA 策略与 CPU affinity 会被子进程继承（vLLM 的 TP worker）、跨 exec
   保留，故只需包裹入口命令。
 * node 编号查询：`numactl --hardware` 或 `nvidia-smi topo -m`。通常稳定，
   但换主板/CPU/BIOS 后拓扑可能变化，须重新核对。同时核对宿主内存预算：
-  node 1 = 128G，而 PLE（TP2 下 51G×2）或 N-gram 表（~70G+12G cache-ram）
-  已占大半。
+  node 1 = 128G，而 PLE（TP2 下每 rank ~36G）或 N-gram 表（~70G
+  + 12G cache-ram）已占大半。
 * 依赖：系统 `numactl`（服务器发行版一般已装，否则
   `yum install numactl` / `apt install numactl`）；缺失时条目启动报
   `command not found`，装好或去掉前缀（去掉只损失性能，不影响正确性）。
