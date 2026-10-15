@@ -73,7 +73,7 @@ llama-server -m Qwen3.8-27B-UD-Q8_K_XL.gguf \
 
 ### Qwen3.8-Flash-Next 1M（双卡层切分）
 
-配置见 `Qwen3.8-Flash-Next-1M` 条目（与 `Qwen3.8-Flash-Next-vllm-1M` 同卡 5,6，
+配置见 `Qwen3.8-Flash-Next-1M` 条目（与 `Qwen3.8-Flash-Next-vllm-1M` 同卡，
 group2 内互斥切换，互为 vLLM/llama.cpp 对照）：
 
 * arch 为 `qwen4exp`（b10909 `src/llama-arch.cpp` 核验），故
@@ -85,6 +85,10 @@ group2 内互斥切换，互为 vLLM/llama.cpp 对照）：
 * 显存：单卡 256k 实测 74.4G（`docs/speed-report.md`），1M q8_0 KV ~+15G
   ≈ 90G 偏紧且贴近 #27090 风险区，故双卡层切分（`--device CUDA0,CUDA1`，
   每卡 ~45G）。无 NVLink 时层切分仅残差流跨卡，decode 损耗可忽略。
+* cmd 以 `numactl --cpunodebind=1 --membind=1` 包裹：进程线程与全部内存
+  （N-gram 表 mmap+mlock）钉在 NUMA node 1（所选卡 4,6 所在 socket；
+  改选卡时须复核）。各参数含义与 node 编号查询见 docs/llama-swap.md
+  「NUMA / CPU 绑定」。
 * 全参数与 256k 条目一致（`--ubatch-size 256`、`--n-cpu-moe 0`、
   `GGML_CUDA_CUBLAS_COMPUTE_TYPE=fp32` 等），仅上下文/YaRN/设备不同，
   保证对照口径。

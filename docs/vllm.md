@@ -151,8 +151,12 @@ routed experts——注意力、GDN、共享专家、lm_head、视觉编码器�
 * `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` 必须，否则 vLLM 拒绝超过原生
   `max_position_embeddings`(262144) 的 `--max-model-len`。
 * 显存：1M 单请求 KV ~29G，单卡（74.75G 权重 + 29G）> 96G 不可行；
-  TP2（GPU 5,6）每卡权重 ~37G，KV 池合计 ~80-100G，可并 ~2-3 条 1M
+  TP2 每卡权重 ~37G，KV 池合计 ~80-100G，可并 ~2-3 条 1M
   （以启动 profiling 为准）。
+* cmd 以 `numactl --cpunodebind=1 --membind=1` 包裹：PLE pinned 51G 与
+  进程线程钉在 NUMA node 1（所选卡 4,6 所在 socket；改选卡时须复核），
+  逐 token UVA 预取不跨 UPI。各参数含义与 node 编号查询见
+  docs/llama-swap.md「NUMA / CPU 绑定」。
 * YaRN factor 静态生效，短 prompt 同样受影响；建议长上下文专用端点
   （与 27B 同结论）。
 * QSA 注意力生来面向长上下文：Qwen 报 1M 时 prefill 注意力内核提速

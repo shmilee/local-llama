@@ -84,21 +84,48 @@ llama-swap-start.sh                           # 启动脚本
 | `Qwen3.8-27B-vllm-1M` | vLLM（YaRN） | 同上 FP8 |
 | `Qwen3.8-27B-sglang` | SGLang | FP8 |
 | `Qwen3.8-Flash-Next` | llama.cpp | GGUF UD-IQ4_XS (3 分片) + mmproj |
-| `Qwen3.8-Flash-Next-1M` | llama.cpp（YaRN） | 同上 GGUF（1M 上下文，GPU 5,6 双卡层切分） |
+| `Qwen3.8-Flash-Next-1M` | llama.cpp（YaRN） | 同上 GGUF（1M 上下文，双卡层切分） |
 | `Qwen3.8-Flash-Next-vllm` | vLLM | NVFP4（单卡 96G） |
-| `Qwen3.8-Flash-Next-vllm-1M` | vLLM（YaRN） | NVFP4（1M 上下文，GPU 5,6 TP2） |
+| `Qwen3.8-Flash-Next-vllm-1M` | vLLM（YaRN） | NVFP4（1M 上下文，TP2） |
 | `Qwen3.8-Flash-Next-sglang` | SGLang | NVFP4（单卡 96G） |
 
 * `-1M` 变体：同一份权重加 YaRN ×4 外推到 1M 上下文，与 262K 条目是
   各自独立的进程（互相切换 = 卸载 + 重载）；踩坑见 `docs/llama.cpp.md`
   与 `docs/vllm.md` 的「长上下文（YaRN 1M）」节。
-* GPU 分配见 conf `env`：27B 家族 GPU 2，Flash-Next 家族 GPU 5
-  （两个 1M 条目用 GPU 5,6：vLLM TP2 / llama.cpp 层切分），
-  均避开 CUDA0（防 CLIP 误用）。
+* GPU 分配见 conf `env`：卡号可选（以 conf 实际值为准），均避开 CUDA0
+  （防 CLIP 误用）；唯一不变式是 27B 家族与 Flash-Next 家族不共卡
+  （两组可并存）。两个 1M 条目带 numactl NUMA 绑定，node 编号须与所选
+  卡所在 socket 一致（见下文「NUMA / CPU 绑定」）。
 * `routing` 两个 group 与家族对应：group1 = 27B 家族（含 1M 变体），
   group2 = Flash-Next 家族；组内换模型即卸载，两组可并存。
 
 vLLM / SGLang 后端的参数要点见 `docs/vllm.md` / `docs/sglang.md`。
+
+## NUMA / CPU 绑定（双路服务器）
+
+PRO6000 为双路（无 NVLink）：GPU 0-3 挂 NUMA node 0，GPU 4-7 挂 node 1
+（`nvidia-smi topo -m` 的 NUMA Affinity 列；同 socket 卡对为 `NODE`，
+跨 socket 为 `SYS`）。两个 1M 条目（`Qwen3.8-Flash-Next-1M` /
+`Qwen3.8-Flash-Next-vllm-1M`）的 cmd 以
+`numactl --cpunodebind=1 --membind=1` 包裹（当前选 4,6，均在 node 1，
+故编号为 1；改选卡时先确认所选卡所在 node 再改 numactl 编号）：
+
+* `--cpunodebind=1`：进程全部线程只调度在 node 1 的 CPU 上
+  （本机为核 32-63, 96-127）——即 GPU 所连的 socket 侧。
+* `--membind=1`：进程所有内存（pinned 页、mmap 页缓存、mlock 页）只从
+  node 1 的内存分配。
+* 为什么必须：两条目都重度依赖宿主内存——vLLM 的 PLE 表 pinned 51G
+  （逐 token 经 UVA 异步预取，N-gram 层特意放在 layer 2 就是为了与
+  layer 1 计算重叠）；llama.cpp 的 N-gram 表 mmap+mlock ~70G。宿主内存
+  落在对侧 socket 时，每次读取多过一次 UPI，直接侵蚀预取重叠的设计
+  收益。绑定后「计算线程 + 内存 + GPU」同 socket，跨 socket 流量为零。
+* NUMA 策略（mempolicy）与 CPU affinity 会被子进程继承（vLLM 的 TP
+  worker）、跨 exec 保留，故只需包裹入口命令。
+* node 编号查询：`numactl --hardware` 或 `nvidia-smi topo -m`。通常
+  稳定，但换主板/CPU/BIOS 后拓扑可能变化，须重新核对。
+* 依赖：系统 `numactl`（服务器发行版一般已装，否则
+  `yum install numactl` / `apt install numactl`）；缺失时条目启动报
+  `command not found`，装好或去掉前缀（去掉只损失性能，不影响正确性）。
 
 ## 本地补丁（sglext 投机解码统计）
 

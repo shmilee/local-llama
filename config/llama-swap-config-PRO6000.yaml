@@ -555,7 +555,7 @@ models:
     #  --model-draft ${models_dir}/Qwen3.8-Flash-Next/MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
     #  --spec-type draft-mtp --spec-draft-n-max 2
     env:
-      - "CUDA_VISIBLE_DEVICES=5"
+      - "CUDA_VISIBLE_DEVICES=6"
       - "GGML_CUDA_CUBLAS_COMPUTE_TYPE=fp32"
     description: "MoE model (125B/6B active) from Aliyun Qwen"
     aliases:
@@ -597,19 +597,22 @@ models:
       reranker: false
       context: 262144
 
-  # 2b. q38fn @ 1M —— llama.cpp + YaRN（vLLM-1M 的对照条目，双卡 5,6 层切分）
+  # 2b. q38fn @ 1M —— llama.cpp + YaRN（vLLM-1M 的对照条目，双卡层切分）
   # - 依据同 27B-1M：模型卡原生 262144、YaRN ×4 可扩至 1M（vLLM 官方 recipe
   #   "Extend to one million tokens with YaRN"）；GGUF 元数据 context_length
   #   仍为 262144，须 --override-kv 抬高（arch 为 qwen4exp，b10909 源码核验）。
   # - 显存：单卡 256k 实测 74.4G（docs/speed-report.md），1M q8_0 KV ~+15G
   #   ≈ 90G 偏紧且贴近 #27090（~520K prefill 静默崩溃）风险区，故用双卡
-  #   5,6 层切分（与 vLLM-1M 同卡，group2 内互斥切换），每卡 ~45G 余量充足。
+  #   层切分（与 vLLM-1M 同卡，group2 内互斥切换），每卡 ~45G 余量充足。
   # - mrope sections [11,11,10] 在 GGUF 元数据内，--rope-scaling yarn 与
   #   qwen35 同路径（b10909 llama-model.cpp 对 QWEN4EXP 有专门 case）。
   # - 无 NVLink 时层切分仅残差流跨卡，decode 速度损耗可忽略。
+  # - numactl 把进程钉在 NUMA node 1（GPU 4-7 所在 socket，nvidia-smi topo -m 核验）：
+  #   N-gram 表 mmap+mlock ~70G 落在与 GPU 同侧，逐 token 读取不跨 UPI。
+  #   参数含义见 docs/llama-swap.md「NUMA / CPU 绑定」。
   "Qwen3.8-Flash-Next-1M":
     cmd: |
-      pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
+      numactl --cpunodebind=1 --membind=1 pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
       --model ${models_dir}/Qwen3.8-Flash-Next/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
       --mmproj ${models_dir}/Qwen3.8-Flash-Next/mmproj-F16.gguf
       --port ${PORT}
@@ -630,7 +633,7 @@ models:
     #  --model-draft ${models_dir}/Qwen3.8-Flash-Next/MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
     #  --spec-type draft-mtp --spec-draft-n-max 2
     env:
-      - "CUDA_VISIBLE_DEVICES=5,6"
+      - "CUDA_VISIBLE_DEVICES=4,6"
       - "GGML_CUDA_CUBLAS_COMPUTE_TYPE=fp32"
     description: "MoE model (125B/6B active) from Aliyun Qwen, llama.cpp + YaRN, 1M context (dual-GPU, vLLM-1M control)"
     metadata:
@@ -858,7 +861,7 @@ models:
       --tool-call-parser qwen3_coder
       --reasoning-parser qwen3
     env:
-      - "CUDA_VISIBLE_DEVICES=5"
+      - "CUDA_VISIBLE_DEVICES=6"
       - "VLLM_PLE_CPU_OFFLOAD=1"
     description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, vLLM backend"
     metadata:
@@ -879,7 +882,7 @@ models:
       reranker: false
       context: 262144
 
-  # 5b. Flash NVFP4 (124G) vLLM 后端 @ 1M —— YaRN ×4，双卡 PRO6000 TP2（GPU 5,6）
+  # 5b. Flash NVFP4 (124G) vLLM 后端 @ 1M —— YaRN ×4，双卡 PRO6000 TP2
   # - 依据：官方 recipe "Extend to one million tokens with YaRN"
   #   https://recipes.vllm.ai/Qwen/Qwen3.8-Flash-Next —— checkpoint 原生 262K，
   #   text_config 的 rope_parameters 切 yarn、factor 4 扩到 1M；
@@ -890,10 +893,13 @@ models:
   #   KV 池合计 ~80-100G，可并 ~2-3 条 1M（以启动后实测为准）。
   # - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 必须（同 27B-vllm-1M）。
   # - YaRN factor 静态生效，短 prompt 同样受影响；建议长上下文专用端点。
+  # - numactl 把进程钉在 NUMA node 1（GPU 4-7 所在 socket，nvidia-smi topo -m 核验）：
+  #   PLE pinned 51G 落在与 GPU 同侧，逐 token UVA 预取不跨 UPI。
+  #   参数含义见 docs/llama-swap.md「NUMA / CPU 绑定」。
   "Qwen3.8-Flash-Next-vllm-1M":
     useModelName: "${models_dir}/Qwen3.8-Flash-Next-NVFP4"
     cmd: |
-      pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
+      numactl --cpunodebind=1 --membind=1 pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
       ${models_dir}/Qwen3.8-Flash-Next-NVFP4
       --host 127.0.0.1 --port ${PORT}
       --quantization modelopt
@@ -916,13 +922,13 @@ models:
       --tool-call-parser qwen3_coder
       --reasoning-parser qwen3
     env:
-      - "CUDA_VISIBLE_DEVICES=5,6"
+      - "CUDA_VISIBLE_DEVICES=4,6"
       - "VLLM_PLE_CPU_OFFLOAD=1"
       - "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1"
     description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, vLLM backend, YaRN 1M context (TP2)"
     metadata:
       port: ${PORT}
-      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_1m} (YaRN x4, TP2 GPU 5,6)"
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_1m} (YaRN x4, dual-GPU)"
     ttl: 36000
     sendLoadingState: true
     timeouts:
@@ -966,7 +972,7 @@ models:
       --ple-offload-embedding
       --watchdog-timeout 3600
     env:
-      - "CUDA_VISIBLE_DEVICES=5"
+      - "CUDA_VISIBLE_DEVICES=6"
       - "SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK=1"
       - "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
     filters:
