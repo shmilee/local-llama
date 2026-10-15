@@ -84,13 +84,16 @@ llama-swap-start.sh                           # 启动脚本
 | `Qwen3.8-27B-vllm-1M` | vLLM（YaRN） | 同上 FP8 |
 | `Qwen3.8-27B-sglang` | SGLang | FP8 |
 | `Qwen3.8-Flash-Next` | llama.cpp | GGUF UD-IQ4_XS (3 分片) + mmproj |
+| `Qwen3.8-Flash-Next-1M` | llama.cpp（YaRN） | 同上 GGUF（1M 上下文，GPU 5,6 双卡层切分） |
 | `Qwen3.8-Flash-Next-vllm` | vLLM | NVFP4（单卡 96G） |
+| `Qwen3.8-Flash-Next-vllm-1M` | vLLM（YaRN） | NVFP4（1M 上下文，GPU 5,6 TP2） |
 | `Qwen3.8-Flash-Next-sglang` | SGLang | NVFP4（单卡 96G） |
 
 * `-1M` 变体：同一份权重加 YaRN ×4 外推到 1M 上下文，与 262K 条目是
   各自独立的进程（互相切换 = 卸载 + 重载）；踩坑见 `docs/llama.cpp.md`
   与 `docs/vllm.md` 的「长上下文（YaRN 1M）」节。
-* GPU 分配见 conf `env`：27B 家族 GPU 2，Flash-Next 家族 GPU 5，
+* GPU 分配见 conf `env`：27B 家族 GPU 2，Flash-Next 家族 GPU 5
+  （两个 1M 条目用 GPU 5,6：vLLM TP2 / llama.cpp 层切分），
   均避开 CUDA0（防 CLIP 误用）。
 * `routing` 两个 group 与家族对应：group1 = 27B 家族（含 1M 变体），
   group2 = Flash-Next 家族；组内换模型即卸载，两组可并存。

@@ -70,3 +70,21 @@ llama-server -m Qwen3.8-27B-UD-Q8_K_XL.gguf \
   第三方评测报告与 262k 原生的 mean top-20 KLD ≈ 1e-2（出处见 `docs/vllm.md`
   长上下文节）。速度下降主要来自上下文变长（decode 要读满 KV）而非 YaRN；
   公开实测中 1M 与 512K 速度无本质差别。
+
+### Qwen3.8-Flash-Next 1M（双卡层切分）
+
+配置见 `Qwen3.8-Flash-Next-1M` 条目（与 `Qwen3.8-Flash-Next-vllm-1M` 同卡 5,6，
+group2 内互斥切换，互为 vLLM/llama.cpp 对照）：
+
+* arch 为 `qwen4exp`（b10909 `src/llama-arch.cpp` 核验），故
+  `--override-kv qwen4exp.context_length=int:1000000`。
+* mrope sections [11,11,10] 在 GGUF 元数据内（`LLM_KV_ROPE_DIMENSION_SECTIONS`），
+  `--rope-scaling yarn` 与 qwen35 同路径（`llama-model.cpp` 的
+  `llama_model_rope_type` 对 `LLM_ARCH_QWEN4EXP` 有专门 case，
+  `qwen4exp.cpp` 经 `ggml_rope_multi` 传入 `rope_type/n_ctx_orig/freq_scale`）。
+* 显存：单卡 256k 实测 74.4G（`docs/speed-report.md`），1M q8_0 KV ~+15G
+  ≈ 90G 偏紧且贴近 #27090 风险区，故双卡层切分（`--device CUDA0,CUDA1`，
+  每卡 ~45G）。无 NVLink 时层切分仅残差流跨卡，decode 损耗可忽略。
+* 全参数与 256k 条目一致（`--ubatch-size 256`、`--n-cpu-moe 0`、
+  `GGML_CUDA_CUBLAS_COMPUTE_TYPE=fp32` 等），仅上下文/YaRN/设备不同，
+  保证对照口径。

@@ -597,6 +597,79 @@ models:
       reranker: false
       context: 262144
 
+  # 2b. q38fn @ 1M —— llama.cpp + YaRN（vLLM-1M 的对照条目，双卡 5,6 层切分）
+  # - 依据同 27B-1M：模型卡原生 262144、YaRN ×4 可扩至 1M（vLLM 官方 recipe
+  #   "Extend to one million tokens with YaRN"）；GGUF 元数据 context_length
+  #   仍为 262144，须 --override-kv 抬高（arch 为 qwen4exp，b10909 源码核验）。
+  # - 显存：单卡 256k 实测 74.4G（docs/speed-report.md），1M q8_0 KV ~+15G
+  #   ≈ 90G 偏紧且贴近 #27090（~520K prefill 静默崩溃）风险区，故用双卡
+  #   5,6 层切分（与 vLLM-1M 同卡，group2 内互斥切换），每卡 ~45G 余量充足。
+  # - mrope sections [11,11,10] 在 GGUF 元数据内，--rope-scaling yarn 与
+  #   qwen35 同路径（b10909 llama-model.cpp 对 QWEN4EXP 有专门 case）。
+  # - 无 NVLink 时层切分仅残差流跨卡，decode 速度损耗可忽略。
+  "Qwen3.8-Flash-Next-1M":
+    cmd: |
+      pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
+      --model ${models_dir}/Qwen3.8-Flash-Next/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      --mmproj ${models_dir}/Qwen3.8-Flash-Next/mmproj-F16.gguf
+      --port ${PORT}
+      --n-gpu-layers all --device CUDA0,CUDA1
+      --n-cpu-moe 0
+      --mmproj-offload
+      --load-mode mmap+mlock --flash-attn on --fit off
+      --cache-type-k q8_0 --cache-type-v q8_0
+      --kv-unified
+      --ubatch-size 256
+      --cache-ram 12288
+      --ctx-size ${ctx_1m}
+      --rope-scaling yarn --rope-scale 4 --yarn-orig-ctx 262144
+      --override-kv qwen4exp.context_length=int:1000000
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/froggeric-v22.5.jinja
+      --reasoning on --reasoning-format deepseek
+    # MTP wait PR #28243
+    #  --model-draft ${models_dir}/Qwen3.8-Flash-Next/MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
+    #  --spec-type draft-mtp --spec-draft-n-max 2
+    env:
+      - "CUDA_VISIBLE_DEVICES=5,6"
+      - "GGML_CUDA_CUBLAS_COMPUTE_TYPE=fp32"
+    description: "MoE model (125B/6B active) from Aliyun Qwen, llama.cpp + YaRN, 1M context (dual-GPU, vLLM-1M control)"
+    metadata:
+      port: ${PORT}
+      note: "N-gram embedding in system RAM, 1M context (YaRN x4, dual-GPU layer split)"
+    ttl: 36000
+    filters:
+      setParamsByID:
+        "${MODEL_ID}":
+          temperature: 1.0
+          top-p: 0.95
+          top-k: 20
+          min-p: 0.0
+          reasoning-budget: 8192
+          chat-template-kwargs:
+            preserve_thinking: true  # 保留思考过程
+            reasoning_effort: "medium"  # low, medium, xhigh
+        "${MODEL_ID}:xhigh":
+          temperature: 1.0
+          top-p: 0.95
+          top-k: 20
+          min-p: 0.0
+          chat-template-kwargs:
+            preserve_thinking: true
+            reasoning_effort: "xhigh"
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 1000000
+
   # 3. 27B vLLM 后端（FP8）
   # - 参数参考: https://recipes.vllm.ai/Qwen/Qwen3.8-27B
   # - 要点见 docs/vllm.md
@@ -806,6 +879,65 @@ models:
       reranker: false
       context: 262144
 
+  # 5b. Flash NVFP4 (124G) vLLM 后端 @ 1M —— YaRN ×4，双卡 PRO6000 TP2（GPU 5,6）
+  # - 依据：官方 recipe "Extend to one million tokens with YaRN"
+  #   https://recipes.vllm.ai/Qwen/Qwen3.8-Flash-Next —— checkpoint 原生 262K，
+  #   text_config 的 rope_parameters 切 yarn、factor 4 扩到 1M；
+  #   QSA 生来面向长上下文（Qwen 报 1M 时 prefill 注意力内核提速 10.2×）。
+  # - rope 取值已对照 ${models_dir}/Qwen3.8-Flash-Next-NVFP4/config.json 核验
+  #   （theta 1e7、mrope_section [11,11,10]、partial_rotary_factor 0.25，与 27B 一致）。
+  # - 单卡不可行：74.75G 权重 + 1M KV ~29G > 96G；TP2 每卡权重 ~37G，
+  #   KV 池合计 ~80-100G，可并 ~2-3 条 1M（以启动后实测为准）。
+  # - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 必须（同 27B-vllm-1M）。
+  # - YaRN factor 静态生效，短 prompt 同样受影响；建议长上下文专用端点。
+  "Qwen3.8-Flash-Next-vllm-1M":
+    useModelName: "${models_dir}/Qwen3.8-Flash-Next-NVFP4"
+    cmd: |
+      pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
+      ${models_dir}/Qwen3.8-Flash-Next-NVFP4
+      --host 127.0.0.1 --port ${PORT}
+      --quantization modelopt
+      --tensor-parallel-size 2
+      --mm-encoder-tp-mode data
+      --gpu-memory-utilization 0.95
+      --max-model-len ${ctx_1m}
+      --hf-overrides '{"text_config":{"rope_parameters":{"mrope_interleaved":true,"mrope_section":[11,11,10],"rope_type":"yarn","rope_theta":10000000,"partial_rotary_factor":0.25,"factor":4.0,"original_max_position_embeddings":262144}}}'
+      --max-num-seqs 8
+      --max-num-batched-tokens 16384
+      --enable-prefix-caching
+      --moe-backend marlin
+      --attention-config.indexer_kv_dtype fp8
+      --no-enable-flashinfer-autotune
+      --enable-per-request-metrics
+      --enable-prompt-tokens-details
+      --per-request-spec-decode-metrics summary
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+    env:
+      - "CUDA_VISIBLE_DEVICES=5,6"
+      - "VLLM_PLE_CPU_OFFLOAD=1"
+      - "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1"
+    description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, vLLM backend, YaRN 1M context (TP2)"
+    metadata:
+      port: ${PORT}
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_1m} (YaRN x4, TP2 GPU 5,6)"
+    ttl: 36000
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 1000000
+
   # 6. Flash NVFP4 (133G) SGLang 后端
   "Qwen3.8-Flash-Next-sglang":
     # SGLang 按 --model-path 注册模型名，须映射到该路径
@@ -950,7 +1082,9 @@ routing:
           persistent: true
           members:
             - "Qwen3.8-Flash-Next"
+            - "Qwen3.8-Flash-Next-1M"
             - "Qwen3.8-Flash-Next-vllm"
+            - "Qwen3.8-Flash-Next-vllm-1M"
             - "Qwen3.8-Flash-Next-sglang"
 
       # The matrix lists the model combinations that are allowed to run

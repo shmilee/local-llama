@@ -138,6 +138,26 @@ routed experts——注意力、GDN、共享专家、lm_head、视觉编码器�
 * 第三方 NVFP4 导出（RadixArk）有 TP1 "加载完成但 API 不起"（warmup 死锁）
   的报告；nvidia 导出实测未复现。
 
+### 长上下文（YaRN 1M，双卡 TP2）
+
+配置见 `Qwen3.8-Flash-Next-vllm-1M` 条目（官方 recipe
+"Extend to one million tokens with YaRN"，checkpoint 原生 262K）：
+
+* override 嵌在 `text_config.rope_parameters` 下（该 checkpoint 原生
+  `rope_type: default`，与 27B 同构）：加 `factor 4.0` +
+  `original_max_position_embeddings 262144`，其余字段（theta 1e7、
+  mrope_section [11,11,10]、partial_rotary_factor 0.25）已对照
+  config.json 核验，与 27B 一致。
+* `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` 必须，否则 vLLM 拒绝超过原生
+  `max_position_embeddings`(262144) 的 `--max-model-len`。
+* 显存：1M 单请求 KV ~29G，单卡（74.75G 权重 + 29G）> 96G 不可行；
+  TP2（GPU 5,6）每卡权重 ~37G，KV 池合计 ~80-100G，可并 ~2-3 条 1M
+  （以启动 profiling 为准）。
+* YaRN factor 静态生效，短 prompt 同样受影响；建议长上下文专用端点
+  （与 27B 同结论）。
+* QSA 注意力生来面向长上下文：Qwen 报 1M 时 prefill 注意力内核提速
+  10.2×、decode 6.6×（长上下文的性能退化远小于全注意力二次项）。
+
 参考：
 
 * 官方 recipe：<https://recipes.vllm.ai/Qwen/Qwen3.8-Flash-Next>
