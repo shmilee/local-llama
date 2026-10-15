@@ -597,9 +597,8 @@ models:
       reranker: false
       context: 262144
 
-  # 2b. q38fn @ 1M —— llama.cpp + YaRN（vLLM-1M 的对照条目，双卡层切分）
-  # - 依据同 27B-1M：模型卡原生 262144、YaRN ×4 可扩至 1M（vLLM 官方 recipe
-  #   "Extend to one million tokens with YaRN"）；GGUF 元数据 context_length
+  # 2b. q38fn @ 1M —— llama.cpp + YaRN（双卡层切分）
+  # - 依据同 27B-1M：模型卡原生 262144、YaRN ×4 可扩至 1M；GGUF 元数据 context_length
   #   仍为 262144，须 --override-kv 抬高（arch 为 qwen4exp，b10909 源码核验）。
   # - 显存：单卡 256k 实测 74.4G（docs/speed-report.md），1M q8_0 KV ~+15G
   #   ≈ 90G 偏紧且贴近 #27090（~520K prefill 静默崩溃）风险区，故用双卡
@@ -607,12 +606,13 @@ models:
   # - mrope sections [11,11,10] 在 GGUF 元数据内，--rope-scaling yarn 与
   #   qwen35 同路径（b10909 llama-model.cpp 对 QWEN4EXP 有专门 case）。
   # - 无 NVLink 时层切分仅残差流跨卡，decode 速度损耗可忽略。
-  # - numactl 把进程钉在 NUMA node 1（GPU 4-7 所在 socket，nvidia-smi topo -m 核验）：
-  #   N-gram 表 mmap+mlock ~70G 落在与 GPU 同侧，逐 token 读取不跨 UPI。
+  # - numactl 只绑 CPU（--cpunodebind=1，GPU 4-7 所在 socket，nvidia-smi topo -m
+  #   核验）：N-gram 表 mmap+mlock ~70G 由默认 local 策略就近落在 node1，
+  #   逐 token 读取不跨 UPI。不加 --membind（vLLM 条目实测因其 OOM）。
   #   参数含义见 docs/llama-swap.md「NUMA / CPU 绑定」。
   "Qwen3.8-Flash-Next-1M":
     cmd: |
-      numactl --cpunodebind=1 --membind=1 pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
+      numactl --cpunodebind=1 pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
       --model ${models_dir}/Qwen3.8-Flash-Next/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
       --mmproj ${models_dir}/Qwen3.8-Flash-Next/mmproj-F16.gguf
       --port ${PORT}
@@ -635,7 +635,7 @@ models:
     env:
       - "CUDA_VISIBLE_DEVICES=4,6"
       - "GGML_CUDA_CUBLAS_COMPUTE_TYPE=fp32"
-    description: "MoE model (125B/6B active) from Aliyun Qwen, llama.cpp + YaRN, 1M context (dual-GPU, vLLM-1M control)"
+    description: "MoE model (125B/6B active) from Aliyun Qwen, llama.cpp + YaRN, 1M context (dual-GPU)"
     metadata:
       port: ${PORT}
       note: "N-gram embedding in system RAM, 1M context (YaRN x4, dual-GPU layer split)"
@@ -890,16 +890,20 @@ models:
   # - rope 取值已对照 ${models_dir}/Qwen3.8-Flash-Next-NVFP4/config.json 核验
   #   （theta 1e7、mrope_section [11,11,10]、partial_rotary_factor 0.25，与 27B 一致）。
   # - 单卡不可行：74.75G 权重 + 1M KV ~29G > 96G；TP2 每卡权重 ~37G，
-  #   KV 池合计 ~80-100G，可并 ~2-3 条 1M（以启动后实测为准）。
+  #   实测 KV 池 3,904,173 tokens（dummy 启动 profiling），约可并 4 条 1M。
+  # - TP2 下关闭 MTP：实测三种组合均失败（marlin→FP8 MTP 细化 [64,64] 报错；
+  #   auto→主模型 FLASHINFER_CUTLASS 在 SM120 warmup 即崩；marlin+EP→卡死
+  #   CUDA graph 捕获），上游只在 TP4 验证过 MTP。详见 docs/vllm.md 长上下文节。
+  #   同时去掉强依赖 speculative-config 的 --per-request-spec-decode-metrics。
+  # - numactl 只绑 CPU（--cpunodebind=1，GPU 4-7 所在 socket）：PLE 表在 TP2 下
+  #   每 rank 各 pin 51G（共 ~102G），--membind=1 会在 node1（128G）上 OOM
+  #   （实测 worker 被 SIGKILL），故不加 membind，交由默认 local 策略就近分配。
   # - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 必须（同 27B-vllm-1M）。
   # - YaRN factor 静态生效，短 prompt 同样受影响；建议长上下文专用端点。
-  # - numactl 把进程钉在 NUMA node 1（GPU 4-7 所在 socket，nvidia-smi topo -m 核验）：
-  #   PLE pinned 51G 落在与 GPU 同侧，逐 token UVA 预取不跨 UPI。
-  #   参数含义见 docs/llama-swap.md「NUMA / CPU 绑定」。
   "Qwen3.8-Flash-Next-vllm-1M":
     useModelName: "${models_dir}/Qwen3.8-Flash-Next-NVFP4"
     cmd: |
-      numactl --cpunodebind=1 --membind=1 pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
+      numactl --cpunodebind=1 pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
       ${models_dir}/Qwen3.8-Flash-Next-NVFP4
       --host 127.0.0.1 --port ${PORT}
       --quantization modelopt
@@ -916,8 +920,6 @@ models:
       --no-enable-flashinfer-autotune
       --enable-per-request-metrics
       --enable-prompt-tokens-details
-      --per-request-spec-decode-metrics summary
-      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
       --enable-auto-tool-choice
       --tool-call-parser qwen3_coder
       --reasoning-parser qwen3

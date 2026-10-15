@@ -151,12 +151,24 @@ routed experts——注意力、GDN、共享专家、lm_head、视觉编码器�
 * `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` 必须，否则 vLLM 拒绝超过原生
   `max_position_embeddings`(262144) 的 `--max-model-len`。
 * 显存：1M 单请求 KV ~29G，单卡（74.75G 权重 + 29G）> 96G 不可行；
-  TP2 每卡权重 ~37G，KV 池合计 ~80-100G，可并 ~2-3 条 1M
-  （以启动 profiling 为准）。
-* cmd 以 `numactl --cpunodebind=1 --membind=1` 包裹：PLE pinned 51G 与
-  进程线程钉在 NUMA node 1（所选卡 4,6 所在 socket；改选卡时须复核），
-  逐 token UVA 预取不跨 UPI。各参数含义与 node 编号查询见
-  docs/llama-swap.md「NUMA / CPU 绑定」。
+  TP2 每卡权重 ~37G，实测 KV 池 3,904,173 tokens，1M 上下文约可并 3.9 条。
+* cmd 以 `numactl --cpunodebind=1` 包裹，**不加 `--membind=1`**：PLE 表在
+  TP2 下每 rank 各 pin 51G（共 ~102G），严格绑定会在 node 1（128G）OOM
+  ——实测 worker 被 SIGKILL（表现为无 Python traceback 的
+  "Engine core initialization failed"），去掉 membind 即恢复。各参数含义与
+  node 编号查询见 docs/llama-swap.md「NUMA / CPU 绑定」。
+* **TP2 下必须关闭 MTP**（`--load-format dummy` 快速启动实测，三种组合全挂）：
+  - `marlin`（现状）：MTP 头 intermediate 被 TP 切到 320，vLLM 把 FP8
+    block scale 细化为 [64,64]，MARLIN FP8 不接受 → ValueError（原始报错）；
+  - `auto`：主模型选 FLASHINFER_CUTLASS，在 SM120 上 warmup 阶段即崩；
+  - `marlin` + `--enable-expert-parallel`：构造通过（EP 不再切 intermediate，
+    无细化），但卡死在 CUDA graph 捕获；
+  - `marlin` 无 MTP：✅ Application startup complete。
+  根因：`--moe-backend` 只能全局指定一个值（无按量化分别指定），而本机
+  SM120 上主模型必须 marlin（auto 的 FLASHINFER_CUTLASS 不可用），MTP 头
+  又是 FP8、只有 Triton 能接受细化后的 block。上游只验证过本模型 TP4 的 MTP。
+  故本条目不开 `--speculative-config`，同时去掉强依赖它的
+  `--per-request-spec-decode-metrics`（pydantic 校验会失败）。
 * YaRN factor 静态生效，短 prompt 同样受影响；建议长上下文专用端点
   （与 27B 同结论）。
 * QSA 注意力生来面向长上下文：Qwen 报 1M 时 prefill 注意力内核提速
