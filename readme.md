@@ -49,6 +49,7 @@ pixi run -e sglang-cuda    sglang-cuda-verify
 | [docs/sglang.md](docs/sglang.md) | SGLang 启动参数、混合注意力（GDN）要点 |
 | [docs/models.md](docs/models.md) | 模型挑选、量化说明、下载记录、chat templates |
 | [docs/speed-report.md](docs/speed-report.md) | 速度测试报告 |
+| [docs/issue-opencode-long-context-timeout.md](docs/issue-opencode-long-context-timeout.md) | issue 记录：长上下文请求/压缩在 ~300 s 被中断（opencode 三个超时 × 静默链路 × 冷 prefill）的排查与修复 |
 
 ## TTS
 

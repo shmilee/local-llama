@@ -213,6 +213,7 @@ macros:
     --kv-cache-dtype fp8
     --enable-prefix-caching
     --prefix-match-unit 64
+    --sse-keep-alive-interval 15
 
   # SGLang（pixi 环境 sglang-cuda，PyPI + torch cu130，见 docs/pixi-environments.md）
   # 参数测试：
