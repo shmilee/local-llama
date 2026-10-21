@@ -1,8 +1,11 @@
 # 下载文件
 download/*
 
-# 二进制命令, 如 llama-swap
+# 二进制命令, 如 llama-swap / openchamber
 bin/
+
+# openchamber 安装/运行目录（scripts/openchamber-install.sh）
+openchamber/
 
 # 日志
 logs/
