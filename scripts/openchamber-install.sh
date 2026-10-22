@@ -215,6 +215,9 @@ if [ "$CHECK_ONLY" = 1 ]; then
     fi
     if [ "$WITH_OMP" = 1 ]; then
         echo "oh-my-opencode-slim: 安装（version=$OMP_VERSION, preset=$OMP_PRESET, skills=$OMP_SKILLS）"
+        if [ -f "$REPO_ROOT/config/oh-my-opencode-slim.json" ]; then
+            echo "OMP 配置模板: 复制 $REPO_ROOT/config/oh-my-opencode-slim.json -> $OC_CONFIG_DIR/oh-my-opencode-slim.json"
+        fi
     else
         echo "oh-my-opencode-slim: 跳过（--no-omp）"
     fi
@@ -438,6 +441,17 @@ if [ "$WITH_OMP" = 1 ]; then
     if ! OPENCODE_CONFIG_DIR="$OC_CONFIG_DIR" "$NODE_BIN" "$OMP_ENTRY" "${OMP_ARGS[@]}"; then
         rm -f "$OMP_BEFORE" "$OMP_AFTER" "$OMP_BEFORE_PATHS" "$OMP_AFTER_PATHS" "$OMP_LIST"
         die "oh-my-opencode-slim 安装失败"
+    fi
+
+    # 安装器生成 openai/opencode-go；用仓库模板补上 inherit-session 并设为默认
+    if [ "$OMP_DRY" = 0 ] && [ -f "$REPO_ROOT/config/oh-my-opencode-slim.json" ]; then
+        OMP_CFG_DST="$OC_CONFIG_DIR/oh-my-opencode-slim.json"
+        if [ -f "$OMP_CFG_DST" ] && ! cmp -s "$REPO_ROOT/config/oh-my-opencode-slim.json" "$OMP_CFG_DST"; then
+            cp -p "$OMP_CFG_DST" "$OMP_CFG_DST.bak.$(date +%Y%m%d%H%M%S)"
+            log "已备份现有 OMP 配置: $OMP_CFG_DST.bak.*"
+        fi
+        cp "$REPO_ROOT/config/oh-my-opencode-slim.json" "$OMP_CFG_DST"
+        log "OMP 配置模板已应用: $OMP_CFG_DST（active preset: inherit-session）"
     fi
 
     if [ "$OMP_DRY" = 1 ]; then
