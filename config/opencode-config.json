@@ -1,0 +1,129 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "HHF": {
+      "name": "HonghuFusion",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:12435/v1",
+        "apiKey": "{env:HHF_API_KEY_1}",
+        "timeout": 1800000,
+        "headerTimeout": 1200000,
+        "chunkTimeout": 1200000
+      },
+      "models": {
+        "Qwen3.8-27B": {
+          "name": "Qwen3.8-27B",
+          "limit": {
+            "context": 262144,
+            "input": 217777,
+            "output": 32768
+          },
+          "capabilities": {
+            "reasoning": { "supported": true }
+          }
+        },
+        "Qwen3.8-27B-vllm-1M": {
+          "name": "Qwen3.8-27B, 1M",
+          "limit": {
+            "context": 1000000,
+            "input": 888888,
+            "output": 65536
+          },
+          "capabilities": {
+            "reasoning": { "supported": true }
+          }
+        },
+        "Qwen3.8-Flash-Next": {
+          "name": "Qwen3.8-Flash-Next",
+          "limit": {
+            "context": 262144,
+            "input": 217777,
+            "output": 32768
+          },
+          "capabilities": {
+            "reasoning": { "supported": true }
+          }
+        },
+        "Qwen3.8-Flash-Next-vllm-1M": {
+          "name": "Qwen3.8-Flash-Next, 1M",
+          "limit": {
+            "context": 1000000,
+            "input": 888888,
+            "output": 65536
+          },
+          "capabilities": {
+            "reasoning": { "supported": true }
+          }
+        }
+      }
+    },
+    "T14p": {
+      "name": "T14p",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://100.64.18.4:12434/v1",
+        "apiKey": "{env:T14P_API_KEY_1}",
+        "timeout": 900000
+      },
+      "models": {
+        "Qwen3.6-35B-A3B": {
+          "name": "Qwen3.6-35B-A3B",
+          "limit": {
+            "context": 32768,
+            "input": 22222,
+            "output": 8192
+          },
+          "capabilities": {
+            "reasoning": { "supported": true }
+          }
+        },
+        "Gemma4-26B-A4B": {
+          "name": "Gemma4-26B-A4B",
+          "limit": {
+            "context": 32768,
+            "input": 22222,
+            "output": 8192
+          },
+          "capabilities": {
+            "reasoning": { "supported": true }
+          }
+        },
+        "Toy-A": {
+          "name": "Llama3.2-3B",
+          "limit": {
+            "context": 32768,
+            "input": 22222,
+            "output": 8192
+          }
+        },
+        "Toy-B": {
+          "name": "MiniCPM5-1B",
+          "limit": {
+            "context": 32768,
+            "input": 22222,
+            "output": 8192
+          },
+          "capabilities": {
+            "reasoning": { "supported": true }
+          }
+        }
+      }
+    }
+  },
+  "mcp": {
+    "servers": {
+      "nuxt": {
+        "type": "remote",
+        "url": "https://nuxt.com/mcp",
+        "disabled": false
+      }
+    }
+  },
+  "plugins": ["oh-my-opencode-slim"],
+  "agents": {
+    "explore": { "disabled": true },
+    "general": { "disabled": true }
+  },
+  "lsp": true
+}

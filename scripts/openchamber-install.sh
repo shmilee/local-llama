@@ -13,6 +13,14 @@
 #   --opencode-version V 安装指定版本的 @opencode/cli（隐含 --force-opencode）
 #   --force-node        即使系统 node 满足要求也安装到 prefix
 #   --force-opencode    即使系统 opencode 满足要求也安装到 prefix
+#   --no-opencode-config 不复制 config/opencode-config.json（默认复制）
+#   --no-omp            跳过 oh-my-opencode-slim（默认安装）
+#   --omp-version V     oh-my-opencode-slim 版本（默认 latest）
+#   --omp-preset NAME   生成/激活的 preset（默认 openai；另见 opencode-go）
+#   --omp-skills MODE   bundled skills: yes|no|force（默认 yes）
+#   --omp-background-subagents yes|no
+#                       是否把后台 subagent 环境变量写入 shell rc（默认 no）
+#   --omp-dry-run       只模拟 oh-my-opencode-slim 安装，不写文件
 #   --check             只检测并打印决策，不做任何安装
 #   -h, --help          显示帮助
 #
@@ -32,6 +40,9 @@
 #     无论哪种，store/cache 都落在 $PREFIX 内，不污染 ~/.local/share/pnpm。
 #   * OpenChamber 数据默认放 $PREFIX/data（wrapper 里设置
 #     OPENCHAMBER_DATA_DIR），不写 ~/.config/openchamber。
+#   * 默认安装 oh-my-opencode-slim（CLI 放 $PREFIX/omp-cli），以 --no-tui
+#     非交互方式写入 OpenCode 配置；安装后列出新增/更新的文件
+#     （忽略 node_modules）。用 --no-omp 跳过。
 #   * 幂等，可重复执行。
 #
 # 环境变量与数据路径（脚本结束时会再次打印）：
@@ -60,6 +71,14 @@ PACKAGE="@openchamber/web"
 PACKAGE_VERSION="latest"
 OPENCODE_PACKAGE="@opencode/cli"
 OPENCODE_VERSION="latest"
+OC_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
+WITH_OC_CONFIG=1
+WITH_OMP=1
+OMP_VERSION="latest"
+OMP_PRESET="openai"
+OMP_SKILLS="yes"
+OMP_BG="no"
+OMP_DRY=0
 FORCE_NODE=0
 FORCE_OPENCODE=0
 CHECK_ONLY=0
@@ -80,11 +99,27 @@ while [ $# -gt 0 ]; do
             shift 2 ;;
         --force-node)    FORCE_NODE=1; shift ;;
         --force-opencode) FORCE_OPENCODE=1; shift ;;
+        --no-opencode-config) WITH_OC_CONFIG=0; shift ;;
+        --no-omp)        WITH_OMP=0; shift ;;
+        --omp-version)   OMP_VERSION="${2:?--omp-version 需要参数}"; shift 2 ;;
+        --omp-preset)    OMP_PRESET="${2:?--omp-preset 需要参数}"; shift 2 ;;
+        --omp-skills)    OMP_SKILLS="${2:?--omp-skills 需要参数}"; shift 2 ;;
+        --omp-background-subagents) OMP_BG="${2:?--omp-background-subagents 需要参数}"; shift 2 ;;
+        --omp-dry-run)   OMP_DRY=1; shift ;;
         --check)         CHECK_ONLY=1; shift ;;
         -h|--help)       usage ;;
         *) echo "未知选项: $1（用 --help 查看）" >&2; exit 1 ;;
     esac
 done
+
+case "$OMP_SKILLS" in
+    yes|no|force) ;;
+    *) die "--omp-skills 必须是 yes|no|force" ;;
+esac
+case "$OMP_BG" in
+    yes|no) ;;
+    *) die "--omp-background-subagents 必须是 yes|no" ;;
+esac
 
 case "$PREFIX" in
     /*) ;;
@@ -173,6 +208,16 @@ if [ "$CHECK_ONLY" = 1 ]; then
     fi
     echo "opencode 目标: $OPENCODE_VERSION"
     echo "系统 pnpm:     ${SYS_PNPM_VER:-未安装}（要求 >= $PNPM_MIN）→ $([ "$SYS_PNPM" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
+    if [ "$WITH_OC_CONFIG" = 1 ]; then
+        echo "OpenCode 配置: 复制 $REPO_ROOT/config/opencode-config.json -> $OC_CONFIG_DIR/opencode.json"
+    else
+        echo "OpenCode 配置: 跳过（--no-opencode-config）"
+    fi
+    if [ "$WITH_OMP" = 1 ]; then
+        echo "oh-my-opencode-slim: 安装（version=$OMP_VERSION, preset=$OMP_PRESET, skills=$OMP_SKILLS）"
+    else
+        echo "oh-my-opencode-slim: 跳过（--no-omp）"
+    fi
     exit 0
 fi
 
@@ -325,6 +370,112 @@ exec "\$PREFIX/app/node_modules/.bin/openchamber" "\$@"
 EOF
 chmod +x "$PREFIX/bin/openchamber"
 
+# --- OpenCode 配置 ---
+if [ "$WITH_OC_CONFIG" = 1 ]; then
+    OC_CONFIG_SRC="$REPO_ROOT/config/opencode-config.json"
+    if [ -f "$OC_CONFIG_SRC" ]; then
+        mkdir -p "$OC_CONFIG_DIR"
+        if [ -f "$OC_CONFIG_DIR/opencode.json" ] && ! cmp -s "$OC_CONFIG_SRC" "$OC_CONFIG_DIR/opencode.json"; then
+            OC_BAK="$OC_CONFIG_DIR/opencode.json.bak.$(date +%Y%m%d%H%M%S)"
+            cp -p "$OC_CONFIG_DIR/opencode.json" "$OC_BAK"
+            log "已备份现有 OpenCode 配置: $OC_BAK"
+        fi
+        cp "$OC_CONFIG_SRC" "$OC_CONFIG_DIR/opencode.json"
+        log "OpenCode 配置已写入: $OC_CONFIG_DIR/opencode.json"
+        if [ -f "$OC_CONFIG_DIR/opencode.jsonc" ]; then
+            warn "存在 $OC_CONFIG_DIR/opencode.jsonc（优先于 .json），如需生效请手动合并或移除"
+        fi
+    else
+        warn "未找到 $OC_CONFIG_SRC，跳过 OpenCode 配置复制"
+    fi
+else
+    log "跳过 OpenCode 配置复制（--no-opencode-config）"
+fi
+
+# --- oh-my-opencode-slim（OpenCode 配置/插件）---
+if [ "$WITH_OMP" = 1 ]; then
+    OMP_CLI_DIR="$PREFIX/omp-cli"
+    OMP_ENTRY="$OMP_CLI_DIR/node_modules/oh-my-opencode-slim/dist/cli/index.js"
+
+    log "安装 oh-my-opencode-slim@$OMP_VERSION 到 $OMP_CLI_DIR"
+    mkdir -p "$OMP_CLI_DIR"
+    if [ ! -f "$OMP_CLI_DIR/package.json" ]; then
+        printf '{\n  "name": "omp-cli",\n  "private": true\n}\n' > "$OMP_CLI_DIR/package.json"
+    fi
+    (
+        cd "$OMP_CLI_DIR"
+        XDG_CACHE_HOME="$PREFIX/cache" \
+        npm_config_update_notifier=false \
+            "$PNPM_BIN" add --store-dir "$PREFIX/pnpm-store" \
+                --allow-build=@ast-grep/cli --allow-build=msgpackr-extract \
+                "oh-my-opencode-slim@$OMP_VERSION" >/dev/null
+    )
+    [ -f "$OMP_ENTRY" ] || die "oh-my-opencode-slim CLI 未找到：$OMP_ENTRY"
+
+    mkdir -p "$OC_CONFIG_DIR"
+
+    OMP_SUM="sha256sum"
+    command -v sha256sum >/dev/null 2>&1 || OMP_SUM="shasum -a 256"
+    OMP_BEFORE="$PREFIX/.omp-before.$$"
+    OMP_AFTER="$PREFIX/.omp-after.$$"
+    OMP_BEFORE_PATHS="$OMP_BEFORE.paths"
+    OMP_AFTER_PATHS="$OMP_AFTER.paths"
+    OMP_LIST="$PREFIX/.omp-list.$$"
+
+    ( cd "$OC_CONFIG_DIR" && find . -type f ! -path '*/node_modules/*' ! -path '*.write-lock/*' -print0 \
+        | sort -z > "$OMP_LIST" && if [ -s "$OMP_LIST" ]; then xargs -0 $OMP_SUM < "$OMP_LIST" | sort -k2; fi ) > "$OMP_BEFORE"
+    awk '{print $2}' "$OMP_BEFORE" | sort > "$OMP_BEFORE_PATHS"
+
+    # 以安装器自身的 help 为准决定是否传 --skills（v3 起内置 skills，不再有该参数）
+    OMP_INSTALL_HELP="$("$NODE_BIN" "$OMP_ENTRY" install --help 2>&1 || true)"
+    OMP_ARGS=(install --no-tui --companion=no --preset="$OMP_PRESET" --background-subagents="$OMP_BG")
+    case "$OMP_INSTALL_HELP" in
+        *--skills*) OMP_ARGS+=(--skills="$OMP_SKILLS") ;;
+    esac
+    [ "$OMP_DRY" = 1 ] && OMP_ARGS+=(--dry-run)
+
+    log "写入 OpenCode 配置：$OC_CONFIG_DIR（preset=$OMP_PRESET, skills=$OMP_SKILLS, bg-subagents=$OMP_BG）"
+    if ! OPENCODE_CONFIG_DIR="$OC_CONFIG_DIR" "$NODE_BIN" "$OMP_ENTRY" "${OMP_ARGS[@]}"; then
+        rm -f "$OMP_BEFORE" "$OMP_AFTER" "$OMP_BEFORE_PATHS" "$OMP_AFTER_PATHS" "$OMP_LIST"
+        die "oh-my-opencode-slim 安装失败"
+    fi
+
+    if [ "$OMP_DRY" = 1 ]; then
+        log "oh-my-opencode-slim：dry-run，未写入文件"
+    else
+        ( cd "$OC_CONFIG_DIR" && find . -type f ! -path '*/node_modules/*' ! -path '*.write-lock/*' -print0 \
+            | sort -z > "$OMP_LIST" && if [ -s "$OMP_LIST" ]; then xargs -0 $OMP_SUM < "$OMP_LIST" | sort -k2; fi ) > "$OMP_AFTER"
+        awk '{print $2}' "$OMP_AFTER" | sort > "$OMP_AFTER_PATHS"
+
+        echo
+        echo "  oh-my-opencode-slim 变更（已忽略 node_modules / write-lock）："
+        if [ -n "$(comm -13 "$OMP_BEFORE_PATHS" "$OMP_AFTER_PATHS")" ]; then
+            echo "    新增文件："
+            comm -13 "$OMP_BEFORE_PATHS" "$OMP_AFTER_PATHS" | sed 's#^\./##' | sed 's/^/      /'
+        fi
+        if [ -n "$(awk 'NR==FNR{h[$2]=$1;next} ($2 in h) && h[$2]!=$1 {print $2}' "$OMP_BEFORE" "$OMP_AFTER")" ]; then
+            echo "    更新文件："
+            awk 'NR==FNR{h[$2]=$1;next} ($2 in h) && h[$2]!=$1 {print $2}' "$OMP_BEFORE" "$OMP_AFTER" \
+                | sed 's#^\./##' | sed 's/^/      /'
+        fi
+
+        OMP_PKG_DIR="$OMP_CLI_DIR/node_modules/oh-my-opencode-slim"
+        if [ -d "$OMP_PKG_DIR/src/skills" ] \
+            && { [ ! -d "$OC_CONFIG_DIR/skills" ] || [ -z "$(ls -A "$OC_CONFIG_DIR/skills" 2>/dev/null)" ]; }; then
+            echo "    插件内置 skills（不落盘，由插件运行时注册）："
+            ( cd "$OMP_PKG_DIR/src/skills" && ls -1d */ 2>/dev/null | sed 's#/$##' | sed 's/^/      /' )
+        fi
+        if [ -f "$OC_CONFIG_DIR/oh-my-opencode-slim.json" ]; then
+            OMP_AGENTS="$("$NODE_BIN" -e "const c=require('$OC_CONFIG_DIR/oh-my-opencode-slim.json'); const p=(c.presets&&c.presets[c.preset])||{}; console.log(Object.keys(p).join(' '))" 2>/dev/null || true)"
+            [ -n "$OMP_AGENTS" ] && echo "    内置 agents（preset=$OMP_PRESET）：$OMP_AGENTS"
+        fi
+        log "oh-my-opencode-slim 配置已写入；重启 OpenCode 后生效"
+    fi
+    rm -f "$OMP_BEFORE" "$OMP_AFTER" "$OMP_BEFORE_PATHS" "$OMP_AFTER_PATHS" "$OMP_LIST"
+else
+    log "跳过 oh-my-opencode-slim（--no-omp）"
+fi
+
 # --- 链接到 local-llama/bin ---
 link_bin() {
     local name="$1" target="$2" rel
@@ -398,10 +549,13 @@ echo
 echo "环境变量与数据路径："
 echo "  OPENCHAMBER_DATA_DIR  $PREFIX/data          （wrapper 已默认设置）"
 echo "  OpenChamber app       $APP_DIR"
+if [ "$WITH_OMP" = 1 ]; then
+    echo "  oh-my-opencode-slim   $PREFIX/omp-cli（安装器 + preset=$OMP_PRESET）"
+fi
 echo "  pnpm store            $PREFIX/pnpm-store"
 echo "  npm/pnpm cache        $PREFIX/cache"
 echo "  Node                  $NODE_BIN"
-echo "  OpenCode 配置         ${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+echo "  OpenCode 配置         ${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
 echo "  OpenCode 数据库       ${OPENCODE_DB:-$HOME/.local/share/opencode/opencode.db}"
 echo "  OpenCode server       ${OPENCODE_HOST:-<未设置，OpenChamber 将自行管理>}"
 echo
