@@ -115,11 +115,22 @@ service_pid() {
     python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.local/state/opencode/service.json")))["pid"])' 2>/dev/null || true
 }
 
-# 服务进程的变量是否与 local.env 不一致（0 = 缺失或不一致）
+# 服务进程的“配置相关变量”是否与 local.env 不一致（0 = 缺失或不一致）。
+# 只比较 OpenCode 配置真正引用的变量，避免 MACHINE_NAME/绑定地址等无关变量导致误重启。
 service_lacks_env() {
-    local pid="$1" var expected actual
+    local pid="$1" var expected actual cfg="$REPO_ROOT/config/opencode-config.json" vars=""
     [ -n "$pid" ] && [ -r "/proc/$pid/environ" ] || return 1
-    for var in $(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$LOCAL_ENV" 2>/dev/null | tr -d '=' || true); do
+
+    if [ -f "$cfg" ]; then
+        vars="$(grep -oE '\{env:[A-Za-z_][A-Za-z0-9_]*\}' "$cfg" 2>/dev/null \
+            | sed -E 's/^\{env:(.*)\}$/\1/' | sort -u || true)"
+    fi
+    if [ -z "$vars" ]; then
+        vars="$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*_API_KEY(_[0-9]+)?=' "$LOCAL_ENV" 2>/dev/null \
+            | tr -d '=' | sort -u || true)"
+    fi
+
+    for var in $vars; do
         expected="${!var:-}"
         actual="$(tr '\0' '\n' < "/proc/$pid/environ" | sed -n "s/^${var}=//p" | head -n1)"
         if [ "$actual" != "$expected" ]; then
