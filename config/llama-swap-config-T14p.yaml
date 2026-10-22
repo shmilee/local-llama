@@ -219,7 +219,8 @@ macros:
 # - each key is a non-empty string
 apiKeys:
   # tip, one liner: printf "sk-%s\n" "$(head -c 48 /dev/urandom | base64 )"
-  - "sk-ltZQUcSjQqF4b4TbW3MkF/RYmzbtwTlrAPgz2Fou849Hz5JcBuY0pwUelOZT0s9N"
+  - "${env.T14P_API_KEY_1}"
+  - "${env.T14P_API_KEY_2}"
 
   # use environment variable macros to keep secrets out of the config
   #- "${env.API_KEY_1}"

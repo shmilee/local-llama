@@ -76,6 +76,30 @@ if [ -z "$CONFIG_FILE" ]; then
     exit 1
 fi
 
+# --- 密钥：从 secrets.env 读取并 export，供配置中的 ${env.XXX} 使用 ---
+SECRETS_FILE="$SCRIPT_DIR/secrets.env"
+if [ -f "$SECRETS_FILE" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$SECRETS_FILE"
+    set +a
+else
+    echo "WARN: 未找到 $SECRETS_FILE；配置中的 \${env.*} 可能为空" >&2
+fi
+
+missing=""
+# 先去掉 YAML 注释，避免把注释里的示例 ${env.XXX} 当成必需变量
+for var in $(sed 's/#.*//' "$CONFIG_FILE" 2>/dev/null | grep -oE '\$\{env\.[A-Za-z_][A-Za-z0-9_]*\}' | sed -E 's/^\$\{env\.(.*)\}$/\1/' | sort -u || true); do
+    if [ -z "${!var:-}" ]; then
+        missing="$missing $var"
+    fi
+done
+if [ -n "$missing" ]; then
+    echo "FATAL: 配置引用的环境变量未设置:$missing" >&2
+    echo "请在 $SECRETS_FILE 中补齐后重试。" >&2
+    exit 1
+fi
+
 mkdir -p "$LOG_DIR"
 
 echo "Starting llama-swap"

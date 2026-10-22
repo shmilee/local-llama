@@ -243,9 +243,8 @@ macros:
 # - each key is a non-empty string
 apiKeys:
   # tip, one liner: printf "sk-%s\n" "$(head -c 48 /dev/urandom | base64 )"
-  - "sk-uDWLwp0dJlXov/qQvhPHvzLL/e2EZOvX5AC+2LPvBaznUmvQomgSUIM9sNd1e7dT"
-  - "sk-bgbK/waTWNXZlaoo+NZtDTiFvMg+dJjpQGklYPUyQCNyx0jO9/sBz2KPT+x+TXHv"
-  - "sk-Ge6iugYDvwnrUcxzKxHKxpTQG0fG6mgN0XLdVHF/rm8byNbfwVhoub/ST5kseUcP"
+  - "${env.HHF_API_KEY_1}"
+  - "${env.HHF_API_KEY_2}"
 
   # use environment variable macros to keep secrets out of the config
   #- "${env.API_KEY_1}"
