@@ -335,6 +335,9 @@ else
     fi
 fi
 
+# OMP 安装器通过 PATH 检查 opencode；把刚装到 prefix 的 opencode 加进 PATH
+export PATH="$PREFIX/bin:$PATH"
+
 # --- OpenChamber ---
 APP_DIR="$PREFIX/app"
 log "安装 $PACKAGE@$PACKAGE_VERSION 到 $APP_DIR"
