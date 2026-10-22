@@ -5,7 +5,7 @@
       "name": "HonghuFusion",
       "package": "@opencode/ai/providers/openai-compatible",
       "settings": {
-        "baseURL": "http://127.0.0.1:12435/v1",
+        "baseURL": "http://127.0.0.1:{env:HHF_LLAMA_SWAP_PORT}/v1",
         "apiKey": "{env:HHF_API_KEY_1}",
         "timeout": 1800000,
         "headerTimeout": 1200000,
@@ -62,7 +62,7 @@
       "name": "T14p",
       "package": "@opencode/ai/providers/openai-compatible",
       "settings": {
-        "baseURL": "http://100.64.18.4:12434/v1",
+        "baseURL": "http://127.0.0.1:{env:T14P_LLAMA_SWAP_PORT}/v1",
         "apiKey": "{env:T14P_API_KEY_1}",
         "timeout": 900000
       },

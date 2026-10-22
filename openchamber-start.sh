@@ -1,14 +1,15 @@
 #!/bin/bash
 # 启动 OpenChamber Web UI：先确保 OpenCode 后台服务在跑，再 attach 上去。
 # 单 server / 多 client，避免两个 server 同时写一个 opencode.db。
-# 会自动读取仓库根目录的 secrets.env 并 export 给 OpenCode 服务。
+# 会自动读取仓库根目录的 local.env 并 export 给 OpenCode 服务。
 #
 # 用法: bash openchamber-start.sh [选项]
 #   --web             确保服务在跑并启动 OpenChamber（默认）
 #   --server          只确保服务在跑并打印 URL
 #   --stop            停止 OpenChamber（配合 --stop-service 可停 OpenCode 服务）
 #   -p, --port N      OpenChamber 端口（默认 3000）
-#   --host IP         绑定地址（默认 127.0.0.1；0.0.0.0 = 所有网卡）
+#   --host IP         绑定地址（默认 127.0.0.1；0.0.0.0 = 所有网卡；
+#                     指定 IP 当前不可用时自动回退到 127.0.0.1）
 #   --lan             --host 0.0.0.0 的简写
 #   --ui-password [PW] 浏览器 UI 密码；省略值则让 OpenChamber 自动生成
 #   --foreground      OpenChamber 前台运行（默认 daemon）
@@ -19,17 +20,17 @@ set -eu
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- 密钥：export 给 OpenCode 服务（provider 配置用 env 引用）---
-SECRETS_FILE="$REPO_ROOT/secrets.env"
-if [ -f "$SECRETS_FILE" ]; then
+LOCAL_ENV="$REPO_ROOT/local.env"
+if [ -f "$LOCAL_ENV" ]; then
     set -a
     # shellcheck disable=SC1090
-    . "$SECRETS_FILE"
+    . "$LOCAL_ENV"
     set +a
 fi
 
 MODE="web"
-PORT="3000"
-HOST="127.0.0.1"
+PORT="${OPENCHAMBER_PORT:-3000}"
+HOST="${OPENCHAMBER_BIND:-127.0.0.1}"
 UI_PW=""
 FOREGROUND=0
 STOP_SERVICE=0
@@ -37,6 +38,28 @@ STOP_SERVICE=0
 usage() { sed -n '2,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0; }
 
 die() { echo "error: $*" >&2; exit 1; }
+
+# 判断 IPv4 地址是否属于本机；无法探测时按“可用”处理
+host_is_local() {
+    local h="$1" checked=0
+    case "$h" in
+        127.*|localhost|0.0.0.0|::|::1) return 0 ;;
+    esac
+    if command -v ip >/dev/null 2>&1; then
+        checked=1
+        ip -4 addr show 2>/dev/null | grep -q "inet ${h}/" && return 0
+    fi
+    if command -v ifconfig >/dev/null 2>&1; then
+        checked=1
+        ifconfig 2>/dev/null | grep -q "inet ${h} " && return 0
+    fi
+    if command -v hostname >/dev/null 2>&1 && hostname -I >/dev/null 2>&1; then
+        checked=1
+        hostname -I 2>/dev/null | tr ' ' '\n' | grep -qx "$h" && return 0
+    fi
+    [ "$checked" = 0 ] && return 0
+    return 1
+}
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -92,12 +115,14 @@ service_pid() {
     python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.local/state/opencode/service.json")))["pid"])' 2>/dev/null || true
 }
 
-# 服务进程是否缺少 secrets.env 里的变量（0 = 有缺失）
+# 服务进程的变量是否与 local.env 不一致（0 = 缺失或不一致）
 service_lacks_env() {
-    local pid="$1" var
+    local pid="$1" var expected actual
     [ -n "$pid" ] && [ -r "/proc/$pid/environ" ] || return 1
-    for var in $(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$SECRETS_FILE" 2>/dev/null | tr -d '=' || true); do
-        if ! tr '\0' '\n' < "/proc/$pid/environ" | grep -q "^$var="; then
+    for var in $(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$LOCAL_ENV" 2>/dev/null | tr -d '=' || true); do
+        expected="${!var:-}"
+        actual="$(tr '\0' '\n' < "/proc/$pid/environ" | sed -n "s/^${var}=//p" | head -n1)"
+        if [ "$actual" != "$expected" ]; then
             return 0
         fi
     done
@@ -120,8 +145,8 @@ case "$URL" in
 esac
 
 # 已运行的服务不会继承本脚本 export 的变量；缺密钥时重启一次
-if [ -f "$SECRETS_FILE" ] && service_lacks_env "$(service_pid)"; then
-    echo "==> OpenCode 服务缺少 secrets.env 中的密钥，重启服务以加载"
+if [ -f "$LOCAL_ENV" ] && service_lacks_env "$(service_pid)"; then
+    echo "==> OpenCode 服务与 local.env 不一致，重启服务以加载"
     opencode service restart >/dev/null
     sleep 2
     URL="$(service_url || true)"
@@ -147,6 +172,15 @@ if [ "$MODE" = "server" ]; then
 fi
 
 # --- OpenChamber attach 到同一个 server ---
+# 指定了具体 IPv4 但该地址当前不在本机（如 Tailscale 下线）时，回退到
+# 127.0.0.1，保证本机仍可访问，而不是启动失败。
+if printf '%s' "$HOST" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && [ "$HOST" != "0.0.0.0" ]; then
+    if ! host_is_local "$HOST"; then
+        echo "WARN: 绑定地址 $HOST 当前不可用（Tailscale/网卡未就绪？），回退到 127.0.0.1" >&2
+        HOST="127.0.0.1"
+    fi
+fi
+
 # OpenChamber 拒绝在非回环地址上无认证启动；这里自动生成 UI 密码。
 case "$HOST" in
     127.*|localhost|::1) NEED_AUTH=0 ;;

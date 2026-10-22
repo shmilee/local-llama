@@ -22,7 +22,16 @@ usage() {
 }
 
 CONFIG_NAME=""
-PORT="12435"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOCAL_ENV="$SCRIPT_DIR/local.env"
+if [ -f "$LOCAL_ENV" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$LOCAL_ENV"
+    set +a
+fi
+PORT="${LLAMA_SWAP_PORT:-12435}"
+BIND="${LLAMA_SWAP_BIND:-127.0.0.1}"
 
 PARSED=$(getopt -o "n:p:h" -l "" -n "$0" -- "$@") || exit 1
 eval set -- "$PARSED"
@@ -44,7 +53,6 @@ if [ -z "$CONFIG_NAME" ]; then
     exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN="$SCRIPT_DIR/bin/llama-swap"
 LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/llama-swap-${CONFIG_NAME}-$(date +%F).log"
@@ -76,15 +84,9 @@ if [ -z "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-# --- 密钥：从 secrets.env 读取并 export，供配置中的 ${env.XXX} 使用 ---
-SECRETS_FILE="$SCRIPT_DIR/secrets.env"
-if [ -f "$SECRETS_FILE" ]; then
-    set -a
-    # shellcheck disable=SC1090
-    . "$SECRETS_FILE"
-    set +a
-else
-    echo "WARN: 未找到 $SECRETS_FILE；配置中的 \${env.*} 可能为空" >&2
+# --- 校验配置引用的 ${env.*} 都已在 local.env 中提供 ---
+if [ ! -f "$LOCAL_ENV" ]; then
+    echo "WARN: 未找到 $LOCAL_ENV；配置中的 \${env.*} 可能为空" >&2
 fi
 
 missing=""
@@ -96,7 +98,7 @@ for var in $(sed 's/#.*//' "$CONFIG_FILE" 2>/dev/null | grep -oE '\$\{env\.[A-Za
 done
 if [ -n "$missing" ]; then
     echo "FATAL: 配置引用的环境变量未设置:$missing" >&2
-    echo "请在 $SECRETS_FILE 中补齐后重试。" >&2
+    echo "请在 $LOCAL_ENV 中补齐后重试。" >&2
     exit 1
 fi
 
@@ -115,5 +117,5 @@ export PATH="$HOME/.pixi/bin:$PATH"
 "$BIN" \
     -config "$CONFIG_FILE" \
     -watch-config \
-    -listen "127.0.0.1:${PORT}" \
+    -listen "${BIND}:${PORT}" \
     | tee "$LOG_FILE"
