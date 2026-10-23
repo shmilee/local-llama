@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "HHF/Qwen3.8-27B-vllm-1M",
+  "small_model": "{env:OPENCODE_SMALL_MODEL}",
   "providers": {
     "HHF": {
       "name": "HonghuFusion",
