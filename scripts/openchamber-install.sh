@@ -33,7 +33,9 @@
 #     --prefix "$PWD/openchamber" --bin-dir "$PWD/bin"
 #
 # 行为：
-#   * 系统 node >= 24.14.0 且 npm 可用 → 直接使用，不下载；
+#   * prefix 自带 node（$PREFIX/node/bin/node）存在时按 prefix 管理：
+#     每次运行与 --node-version 目标版本同步，不会误判成系统版本；
+#   * 否则系统 node >= 24.14.0 且 npm 可用 → 直接使用，不下载；
 #     否则下载 Node 到 $PREFIX/node（压缩包留在 download/）。
 #   * prefix 自带 opencode（$PREFIX/bin/opencode）存在时，OpenChamber
 #     实际执行的就是它（wrapper 把 $PREFIX/bin 放在 PATH 开头），脚本
@@ -43,7 +45,9 @@
 #     否则安装 @opencode/cli 到 $PREFIX 并链到 bin/opencode。
 #   * OpenChamber 默认 latest：每次运行从 registry 解析最新版，
 #     与已安装版本不一致时自动更新。
-#   * pnpm 优先用系统的（>= 10.4），否则用 npm 装到 $PREFIX；
+#   * prefix 自带 pnpm（$PREFIX/bin/pnpm）存在时按 prefix 管理：
+#     每次运行与 registry latest 同步；
+#   * 否则 pnpm 优先用系统的（>= 10.4），否则用 npm 装到 $PREFIX；
 #     无论哪种，store/cache 都落在 $PREFIX 内，不污染 ~/.local/share/pnpm。
 #   * OpenChamber 数据默认放 $PREFIX/data（wrapper 里设置
 #     OPENCHAMBER_DATA_DIR），不写 ~/.config/openchamber。
@@ -182,13 +186,21 @@ arch_name() {
 }
 
 # --- 检测：node ---
+# prefix 自带 node 存在时，脚本实际使用它，必须按 prefix 管理
+# （与 --node-version 目标版本同步）。系统探测同时排除落在
+# $PREFIX/$BIN_DIR 内的可执行文件（含上一轮脚本留下的链接）。
 SYS_NODE=0
 SYS_NODE_VER=""
-if [ "$FORCE_NODE" = 0 ] && command -v node >/dev/null 2>&1; then
-    SYS_NODE_VER="$(node --version | sed 's/^v//')"
-    if version_ge "$SYS_NODE_VER" "$NODE_MIN" && command -v npm >/dev/null 2>&1; then
-        SYS_NODE=1
-    fi
+if [ "$FORCE_NODE" = 0 ] && [ ! -x "$PREFIX/node/bin/node" ] \
+    && command -v node >/dev/null 2>&1; then
+    case "$(readlink -f "$(command -v node)" 2>/dev/null || echo "$PREFIX/nope")" in
+        "$PREFIX"/*|"$BIN_DIR"/*) ;;
+        *)
+            SYS_NODE_VER="$(node --version | sed 's/^v//')"
+            if version_ge "$SYS_NODE_VER" "$NODE_MIN" && command -v npm >/dev/null 2>&1; then
+                SYS_NODE=1
+            fi ;;
+    esac
 fi
 
 # --- 检测：opencode ---
@@ -211,13 +223,19 @@ if [ "$FORCE_OPENCODE" = 0 ] && [ ! -x "$PREFIX/bin/opencode" ] \
 fi
 
 # --- 检测：pnpm ---
+# prefix 自带 pnpm 存在时按 prefix 管理（与 registry latest 同步）。
+# 系统探测同时排除 $PREFIX/$BIN_DIR 内的可执行文件。
 SYS_PNPM=0
 SYS_PNPM_VER=""
-if command -v pnpm >/dev/null 2>&1; then
-    SYS_PNPM_VER="$(pnpm --version 2>/dev/null | parse_version)"
-    if [ -n "$SYS_PNPM_VER" ] && version_ge "$SYS_PNPM_VER" "$PNPM_MIN"; then
-        SYS_PNPM=1
-    fi
+if [ ! -x "$PREFIX/bin/pnpm" ] && command -v pnpm >/dev/null 2>&1; then
+    case "$(readlink -f "$(command -v pnpm)" 2>/dev/null || echo "$PREFIX/nope")" in
+        "$PREFIX"/*|"$BIN_DIR"/*) ;;
+        *)
+            SYS_PNPM_VER="$(pnpm --version 2>/dev/null | parse_version)"
+            if [ -n "$SYS_PNPM_VER" ] && version_ge "$SYS_PNPM_VER" "$PNPM_MIN"; then
+                SYS_PNPM=1
+            fi ;;
+    esac
 fi
 
 if [ "$CHECK_ONLY" = 1 ]; then
@@ -231,7 +249,18 @@ if [ "$CHECK_ONLY" = 1 ]; then
     else
         echo "命令链接: 不创建（使用 $PREFIX/bin）"
     fi
-    echo "系统 node:     ${SYS_NODE_VER:-未安装}（要求 >= $NODE_MIN）→ $([ "$SYS_NODE" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
+    if [ -x "$PREFIX/node/bin/node" ]; then
+        CHECK_NODE_CUR="$("$PREFIX/node/bin/node" --version | sed 's/^v//')"
+        if [ "$CHECK_NODE_CUR" = "$NODE_VERSION" ]; then
+            echo "prefix node:   $CHECK_NODE_CUR（已是目标版本 $NODE_VERSION）"
+        else
+            echo "prefix node:   ${CHECK_NODE_CUR:-未知} → 将更新到 $NODE_VERSION"
+        fi
+    elif [ "$FORCE_NODE" = 1 ]; then
+        echo "系统 node:     ${SYS_NODE_VER:-未安装}（已强制安装到 prefix，忽略系统版本）"
+    else
+        echo "系统 node:     ${SYS_NODE_VER:-未安装}（要求 >= $NODE_MIN）→ $([ "$SYS_NODE" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
+    fi
     if [ -x "$PREFIX/bin/opencode" ]; then
         # wrapper 把 $PREFIX/bin 放在 PATH 开头，prefix 自带 opencode 存在时优先使用它
         CHECK_OCP_CUR="$("$PREFIX/bin/opencode" --version 2>/dev/null | parse_version)"
@@ -251,7 +280,17 @@ if [ "$CHECK_ONLY" = 1 ]; then
         echo "系统 opencode: ${SYS_OPENCODE_VER:-未安装}（要求 >= $OPENCODE_MIN）→ $([ "$SYS_OPENCODE" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
     fi
     echo "opencode 目标: $OPENCODE_VERSION"
-    echo "系统 pnpm:     ${SYS_PNPM_VER:-未安装}（要求 >= $PNPM_MIN）→ $([ "$SYS_PNPM" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
+    if [ -x "$PREFIX/bin/pnpm" ]; then
+        CHECK_PNPM_CUR="$("$PREFIX/bin/pnpm" --version 2>/dev/null | parse_version)"
+        CHECK_PNPM_LV="$(resolve_latest pnpm)"
+        if [ -n "$CHECK_PNPM_LV" ] && [ "$CHECK_PNPM_CUR" != "$CHECK_PNPM_LV" ]; then
+            echo "prefix pnpm:   ${CHECK_PNPM_CUR:-未知} → 将更新到 $CHECK_PNPM_LV (latest)"
+        else
+            echo "prefix pnpm:   ${CHECK_PNPM_CUR:-未知}（已是最新，或 latest 解析失败将沿用）"
+        fi
+    else
+        echo "系统 pnpm:     ${SYS_PNPM_VER:-未安装}（要求 >= $PNPM_MIN）→ $([ "$SYS_PNPM" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
+    fi
     CHECK_OC_PKG="$PREFIX/app/node_modules/@openchamber/web/package.json"
     CHECK_OC_CUR=""
     [ -f "$CHECK_OC_PKG" ] && CHECK_OC_CUR="$(sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$CHECK_OC_PKG" | head -n1)"
@@ -295,10 +334,16 @@ if [ "$SYS_NODE" = 1 ]; then
     NODE_BIN="$(command -v node)"
 else
     NODE_DIR="$PREFIX/node"
-    if [ -x "$NODE_DIR/bin/node" ]; then
-        log "使用已有 $NODE_DIR/bin/node（$("$NODE_DIR/bin/node" --version)）"
+    CURRENT_NODE_VER=""
+    [ -x "$NODE_DIR/bin/node" ] && CURRENT_NODE_VER="$("$NODE_DIR/bin/node" --version | sed 's/^v//')"
+    if [ "$CURRENT_NODE_VER" = "$NODE_VERSION" ]; then
+        log "使用已有 $NODE_DIR/bin/node（$("$NODE_DIR/bin/node" --version)，目标 $NODE_VERSION）"
     else
-        log "系统 node 不可用或低于 $NODE_MIN，安装 Node $NODE_VERSION 到 $NODE_DIR"
+        if [ -n "$CURRENT_NODE_VER" ]; then
+            log "更新 prefix node: $CURRENT_NODE_VER -> $NODE_VERSION"
+        else
+            log "系统 node 不可用或低于 $NODE_MIN，安装 Node $NODE_VERSION 到 $NODE_DIR"
+        fi
         ARCH="$(arch_name)"
         TARBALL="node-v$NODE_VERSION-linux-$ARCH.tar.xz"
         mkdir -p "$NODE_DIR"
@@ -346,17 +391,33 @@ if [ "$SYS_PNPM" = 1 ]; then
     log "使用系统 pnpm $SYS_PNPM_VER（store 仍指向 $PREFIX/pnpm-store）"
     PNPM_BIN="$(command -v pnpm)"
 else
-    if [ -x "$PREFIX/lib/node_modules/pnpm/bin/pnpm.cjs" ] && [ -x "$PREFIX/bin/pnpm" ]; then
-        PNPM_BIN="$PREFIX/bin/pnpm"
-        log "使用已有 $PNPM_BIN（$("$PNPM_BIN" --version)）"
+    PNPM_BIN="$PREFIX/bin/pnpm"
+    CURRENT_PNPM_VER=""
+    [ -x "$PNPM_BIN" ] && CURRENT_PNPM_VER="$("$PNPM_BIN" --version 2>/dev/null | parse_version)"
+    LATEST_PNPM_VER="$(resolve_latest pnpm)"
+    REUSE_PNPM=0
+    # 与 OpenChamber/opencode 同步：prefix pnpm 与 registry latest 一致才复用
+    # （latest 解析失败且已有安装时，不中断，沿用已装版本）
+    if [ -n "$CURRENT_PNPM_VER" ] && { [ -z "$LATEST_PNPM_VER" ] || [ "$CURRENT_PNPM_VER" = "$LATEST_PNPM_VER" ]; }; then
+        REUSE_PNPM=1
+    fi
+    if [ "$REUSE_PNPM" = 1 ]; then
+        if [ -z "$LATEST_PNPM_VER" ]; then
+            log "使用已有 $PNPM_BIN（$("$PNPM_BIN" --version)；latest 解析失败，沿用已装版本）"
+        else
+            log "使用已有 $PNPM_BIN（$("$PNPM_BIN" --version)，已是 latest）"
+        fi
     else
-        log "安装 pnpm 到 $PREFIX"
+        if [ -n "$CURRENT_PNPM_VER" ]; then
+            log "更新 prefix pnpm: $CURRENT_PNPM_VER -> ${LATEST_PNPM_VER:-latest}"
+        else
+            log "安装 pnpm@${LATEST_PNPM_VER:-latest} 到 $PREFIX"
+        fi
         npm_config_cache="$PREFIX/cache/npm" \
         npm_config_update_notifier=false \
         npm_config_fund=false \
         npm_config_audit=false \
-            npm install -g --prefix "$PREFIX" $ALLOW_REMOTE --allow-scripts=pnpm pnpm@latest >/dev/null
-        PNPM_BIN="$PREFIX/bin/pnpm"
+            npm install -g --prefix "$PREFIX" $ALLOW_REMOTE --allow-scripts=pnpm "pnpm@${LATEST_PNPM_VER:-latest}" >/dev/null
         "$PNPM_BIN" --version >/dev/null || die "pnpm 安装失败"
         log "pnpm 安装完成: $("$PNPM_BIN" --version)"
     fi
