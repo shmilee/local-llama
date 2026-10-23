@@ -1,5 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "small_model": "HHF/Qwen3.8-27B-vllm-1M",
   "providers": {
     "HHF": {
       "name": "HonghuFusion",
@@ -36,6 +37,7 @@
         },
         "Qwen3.8-Flash-Next": {
           "name": "Qwen3.8-Flash-Next",
+          "disabled": true,
           "limit": {
             "context": 262144,
             "input": 217777,
@@ -47,6 +49,7 @@
         },
         "Qwen3.8-Flash-Next-vllm-1M": {
           "name": "Qwen3.8-Flash-Next, 1M",
+          "disabled": true,
           "limit": {
             "context": 1000000,
             "input": 888888,
@@ -69,6 +72,7 @@
       "models": {
         "Qwen3.6-35B-A3B": {
           "name": "Qwen3.6-35B-A3B",
+          "disabled": true,
           "limit": {
             "context": 32768,
             "input": 22222,
@@ -91,6 +95,7 @@
         },
         "Toy-A": {
           "name": "Llama3.2-3B",
+          "disabled": true,
           "limit": {
             "context": 32768,
             "input": 22222,
