@@ -8,9 +8,10 @@
 #   --prefix DIR        安装目录（默认 $HOME/.local/openchamber，仓库外）
 #   --bin-dir DIR       命令链接目录（默认 $HOME/.local/bin）
 #   --no-bin-link       不创建 bin 软链（自行把 $PREFIX/bin 加入 PATH）
-#   --version V         @openchamber/web 版本（默认 latest）
+#   --version V         @openchamber/web 版本（默认 latest，每次运行解析并更新到最新版）
 #   --node-version V    下载 Node 时使用的版本（默认 24.22.0）
 #   --opencode-version V 安装指定版本的 @opencode/cli（隐含 --force-opencode）
+#                       （默认 latest：使用 prefix 自带 opencode 时，每次运行同步更新到最新版）
 #   --force-node        即使系统 node 满足要求也安装到 prefix
 #   --force-opencode    即使系统 opencode 满足要求也安装到 prefix
 #   --no-opencode-config 不复制 config/opencode-config.json（默认复制）
@@ -35,7 +36,10 @@
 #   * 系统 node >= 24.14.0 且 npm 可用 → 直接使用，不下载；
 #     否则下载 Node 到 $PREFIX/node（压缩包留在 download/）。
 #   * 系统 opencode >= 2.0.20 → 直接使用，不安装；
-#     否则安装 @opencode/cli 到 $PREFIX 并链到 bin/opencode。
+#     否则安装 @opencode/cli 到 $PREFIX 并链到 bin/opencode（默认跟随
+#     registry latest，每次运行都会把 prefix 版本更新到最新）。
+#   * OpenChamber 默认 latest：每次运行从 registry 解析最新版，
+#     与已安装版本不一致时自动更新。
 #   * pnpm 优先用系统的（>= 10.4），否则用 npm 装到 $PREFIX；
 #     无论哪种，store/cache 都落在 $PREFIX 内，不污染 ~/.local/share/pnpm。
 #   * OpenChamber 数据默认放 $PREFIX/data（wrapper 里设置
@@ -151,6 +155,21 @@ parse_version() {
     sed -nE 's/^[^0-9]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n1
 }
 
+# 从 registry 解析包的 latest 版本（系统 npm 优先，其次 prefix 内 node 的 npm）；
+# 失败时输出为空，不视为致命错误（调用方自行决定是否沿用已装版本）
+resolve_latest() {
+    local npmbin=""
+    if command -v npm >/dev/null 2>&1; then
+        npmbin="npm"
+    elif [ -x "$PREFIX/node/bin/npm" ]; then
+        npmbin="$PREFIX/node/bin/npm"
+    else
+        return 0
+    fi
+    "$npmbin" view "$1" version --fetch-retries=2 --fetch-timeout=30000 2>/dev/null | tail -n1
+    return 0
+}
+
 arch_name() {
     case "$(uname -m)" in
         x86_64|amd64)  echo "x64" ;;
@@ -208,6 +227,28 @@ if [ "$CHECK_ONLY" = 1 ]; then
     fi
     echo "opencode 目标: $OPENCODE_VERSION"
     echo "系统 pnpm:     ${SYS_PNPM_VER:-未安装}（要求 >= $PNPM_MIN）→ $([ "$SYS_PNPM" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
+    CHECK_OC_PKG="$PREFIX/app/node_modules/@openchamber/web/package.json"
+    CHECK_OC_CUR=""
+    [ -f "$CHECK_OC_PKG" ] && CHECK_OC_CUR="$(sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$CHECK_OC_PKG" | head -n1)"
+    if [ "$PACKAGE_VERSION" = "latest" ]; then
+        CHECK_OC_LATEST="$(resolve_latest "$PACKAGE")"
+        if [ -z "$CHECK_OC_LATEST" ]; then
+            echo "openchamber:   ${CHECK_OC_CUR:-未安装}（latest 版本解析失败，运行时将重试）"
+        elif [ "$CHECK_OC_CUR" = "$CHECK_OC_LATEST" ]; then
+            echo "openchamber:   $CHECK_OC_CUR（已是 latest）"
+        else
+            echo "openchamber:   ${CHECK_OC_CUR:-未安装} → 将更新到 $CHECK_OC_LATEST (latest)"
+        fi
+    else
+        echo "openchamber:   ${CHECK_OC_CUR:-未安装} → 将安装/更新到 $PACKAGE_VERSION"
+    fi
+    if [ "$SYS_OPENCODE" = 0 ] && [ "$OPENCODE_VERSION" = "latest" ] && [ -x "$PREFIX/bin/opencode" ]; then
+        CHECK_OC_INST="$("$PREFIX/bin/opencode" --version 2>/dev/null | parse_version)"
+        CHECK_OC_LV="$(resolve_latest "$OPENCODE_PACKAGE")"
+        if [ -n "$CHECK_OC_LV" ] && [ -n "$CHECK_OC_INST" ] && [ "$CHECK_OC_INST" != "$CHECK_OC_LV" ]; then
+            echo "prefix opencode: $CHECK_OC_INST → 将更新到 $CHECK_OC_LV (latest)"
+        fi
+    fi
     if [ "$WITH_OC_CONFIG" = 1 ]; then
         echo "OpenCode 配置: 复制 $REPO_ROOT/config/opencode-config.json -> $OC_CONFIG_DIR/opencode.json"
     else
@@ -312,7 +353,14 @@ else
     REUSE_OPENCODE=0
     if [ -x "$INSTALLED_OPENCODE" ]; then
         CURRENT_OPENCODE_VER="$("$INSTALLED_OPENCODE" --version 2>/dev/null | parse_version)"
-        if [ "$OPENCODE_VERSION" = "latest" ] || [ "$CURRENT_OPENCODE_VER" = "$OPENCODE_VERSION" ]; then
+        if [ "$OPENCODE_VERSION" = "latest" ]; then
+            # 与 OpenChamber 同步：prefix opencode 与 registry latest 一致才复用
+            # （latest 解析失败时不中断，优先复用已装版本）
+            LATEST_OPENCODE_VER="$(resolve_latest "$OPENCODE_PACKAGE")"
+            if [ -z "$LATEST_OPENCODE_VER" ] || [ "$CURRENT_OPENCODE_VER" = "$LATEST_OPENCODE_VER" ]; then
+                REUSE_OPENCODE=1
+            fi
+        elif [ "$CURRENT_OPENCODE_VER" = "$OPENCODE_VERSION" ]; then
             REUSE_OPENCODE=1
         fi
     fi
@@ -321,15 +369,21 @@ else
         log "使用已有 $INSTALLED_OPENCODE（$("$INSTALLED_OPENCODE" --version)）"
     else
         if [ "$OPENCODE_VERSION" = "latest" ]; then
-            log "系统 opencode 不可用或低于 $OPENCODE_MIN，安装 $OPENCODE_PACKAGE@latest 到 $PREFIX"
+            OPENCODE_INSTALL_SPEC="$OPENCODE_PACKAGE@$LATEST_OPENCODE_VER"
+            if [ -n "$CURRENT_OPENCODE_VER" ]; then
+                log "系统 opencode 不可用或低于 $OPENCODE_MIN，更新 $OPENCODE_PACKAGE: $CURRENT_OPENCODE_VER -> $LATEST_OPENCODE_VER"
+            else
+                log "系统 opencode 不可用或低于 $OPENCODE_MIN，安装 $OPENCODE_PACKAGE@$LATEST_OPENCODE_VER 到 $PREFIX"
+            fi
         else
+            OPENCODE_INSTALL_SPEC="$OPENCODE_PACKAGE@$OPENCODE_VERSION"
             log "安装指定版本 $OPENCODE_PACKAGE@$OPENCODE_VERSION 到 $PREFIX"
         fi
         npm_config_cache="$PREFIX/cache/npm" \
         npm_config_update_notifier=false \
         npm_config_fund=false \
         npm_config_audit=false \
-            npm install -g --prefix "$PREFIX" $ALLOW_REMOTE --allow-scripts="$OPENCODE_PACKAGE" "$OPENCODE_PACKAGE@$OPENCODE_VERSION" >/dev/null
+            npm install -g --prefix "$PREFIX" $ALLOW_REMOTE --allow-scripts="$OPENCODE_PACKAGE" "$OPENCODE_INSTALL_SPEC" >/dev/null
         [ -x "$INSTALLED_OPENCODE" ] || die "opencode 安装后 $INSTALLED_OPENCODE 不存在"
         log "opencode 安装完成: $("$INSTALLED_OPENCODE" --version)"
     fi
@@ -340,7 +394,6 @@ export PATH="$PREFIX/bin:$PATH"
 
 # --- OpenChamber ---
 APP_DIR="$PREFIX/app"
-log "安装 $PACKAGE@$PACKAGE_VERSION 到 $APP_DIR"
 mkdir -p "$APP_DIR"
 if [ ! -f "$APP_DIR/package.json" ]; then
     printf '{\n  "name": "local-llama-openchamber",\n  "private": true\n}\n' > "$APP_DIR/package.json"
@@ -353,11 +406,32 @@ if version_ge "$("$PNPM_BIN" --version)" "10.4.0"; then
     ALLOW_BUILD="--allow-build=msgpackr-extract --allow-build=node-pty"
 fi
 
+# 实际已安装版本（读 node_modules 内 package.json，未安装则为空）
+OC_PKG_JSON="$APP_DIR/node_modules/@openchamber/web/package.json"
+CURRENT_OC_VER=""
+[ -f "$OC_PKG_JSON" ] && CURRENT_OC_VER="$(sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$OC_PKG_JSON" | head -n1)"
+
+if [ "$PACKAGE_VERSION" = "latest" ]; then
+    TARGET_OC_VER="$(resolve_latest "$PACKAGE")"
+    [ -n "$TARGET_OC_VER" ] || die "无法解析 $PACKAGE 的 latest 版本（registry 不可达？可稍后重试）"
+    if [ -n "$CURRENT_OC_VER" ] && [ "$CURRENT_OC_VER" = "$TARGET_OC_VER" ]; then
+        log "$PACKAGE 已是最新版 $TARGET_OC_VER"
+    elif [ -n "$CURRENT_OC_VER" ]; then
+        log "更新 $PACKAGE: $CURRENT_OC_VER -> $TARGET_OC_VER"
+    else
+        log "安装 $PACKAGE@$TARGET_OC_VER 到 $APP_DIR"
+    fi
+else
+    TARGET_OC_VER="$PACKAGE_VERSION"
+    log "安装 $PACKAGE@$TARGET_OC_VER 到 $APP_DIR（当前 ${CURRENT_OC_VER:-未安装}）"
+fi
+
+# 固定解析出的版本安装；pnpm add 幂等，版本一致时快速完成
 (
     cd "$APP_DIR"
     XDG_CACHE_HOME="$PREFIX/cache" \
     npm_config_update_notifier=false \
-        "$PNPM_BIN" add --store-dir "$PREFIX/pnpm-store" $ALLOW_BUILD "$PACKAGE@$PACKAGE_VERSION"
+        "$PNPM_BIN" add --store-dir "$PREFIX/pnpm-store" $ALLOW_BUILD "$PACKAGE@$TARGET_OC_VER"
 )
 
 # 旧版本可能遗留的空目录（本项目不做 pnpm 全局安装，用不到）
