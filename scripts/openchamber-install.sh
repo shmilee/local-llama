@@ -35,9 +35,12 @@
 # 行为：
 #   * 系统 node >= 24.14.0 且 npm 可用 → 直接使用，不下载；
 #     否则下载 Node 到 $PREFIX/node（压缩包留在 download/）。
-#   * 系统 opencode >= 2.0.20 → 直接使用，不安装；
-#     否则安装 @opencode/cli 到 $PREFIX 并链到 bin/opencode（默认跟随
-#     registry latest，每次运行都会把 prefix 版本更新到最新）。
+#   * prefix 自带 opencode（$PREFIX/bin/opencode）存在时，OpenChamber
+#     实际执行的就是它（wrapper 把 $PREFIX/bin 放在 PATH 开头），脚本
+#     按 prefix 管理：默认跟随 registry latest，每次运行更新到最新，
+#     不会误判成系统版本而放任其过期；
+#   * 否则系统 opencode >= 2.0.20 → 直接使用系统版本；
+#     否则安装 @opencode/cli 到 $PREFIX 并链到 bin/opencode。
 #   * OpenChamber 默认 latest：每次运行从 registry 解析最新版，
 #     与已安装版本不一致时自动更新。
 #   * pnpm 优先用系统的（>= 10.4），否则用 npm 装到 $PREFIX；
@@ -189,13 +192,22 @@ if [ "$FORCE_NODE" = 0 ] && command -v node >/dev/null 2>&1; then
 fi
 
 # --- 检测：opencode ---
+# wrapper 把 $PREFIX/bin 放在 PATH 开头：prefix 自带 opencode 存在时，
+# OpenChamber 实际执行的就是它，必须按 prefix 管理（与 latest 同步），
+# 否则会误判成系统版本而放任它过期。系统探测同时排除落在
+# $PREFIX/$BIN_DIR 内的可执行文件（含上一轮脚本留下的链接）。
 SYS_OPENCODE=0
 SYS_OPENCODE_VER=""
-if [ "$FORCE_OPENCODE" = 0 ] && command -v opencode >/dev/null 2>&1; then
-    SYS_OPENCODE_VER="$(opencode --version 2>/dev/null | parse_version)"
-    if [ -n "$SYS_OPENCODE_VER" ] && version_ge "$SYS_OPENCODE_VER" "$OPENCODE_MIN"; then
-        SYS_OPENCODE=1
-    fi
+if [ "$FORCE_OPENCODE" = 0 ] && [ ! -x "$PREFIX/bin/opencode" ] \
+    && command -v opencode >/dev/null 2>&1; then
+    case "$(readlink -f "$(command -v opencode)" 2>/dev/null || echo "$PREFIX/nope")" in
+        "$PREFIX"/*|"$BIN_DIR"/*) ;;
+        *)
+            SYS_OPENCODE_VER="$(opencode --version 2>/dev/null | parse_version)"
+            if [ -n "$SYS_OPENCODE_VER" ] && version_ge "$SYS_OPENCODE_VER" "$OPENCODE_MIN"; then
+                SYS_OPENCODE=1
+            fi ;;
+    esac
 fi
 
 # --- 检测：pnpm ---
@@ -220,7 +232,20 @@ if [ "$CHECK_ONLY" = 1 ]; then
         echo "命令链接: 不创建（使用 $PREFIX/bin）"
     fi
     echo "系统 node:     ${SYS_NODE_VER:-未安装}（要求 >= $NODE_MIN）→ $([ "$SYS_NODE" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
-    if [ "$FORCE_OPENCODE" = 1 ]; then
+    if [ -x "$PREFIX/bin/opencode" ]; then
+        # wrapper 把 $PREFIX/bin 放在 PATH 开头，prefix 自带 opencode 存在时优先使用它
+        CHECK_OCP_CUR="$("$PREFIX/bin/opencode" --version 2>/dev/null | parse_version)"
+        if [ "$OPENCODE_VERSION" = "latest" ]; then
+            CHECK_OCP_LV="$(resolve_latest "$OPENCODE_PACKAGE")"
+            if [ -n "$CHECK_OCP_LV" ] && [ "$CHECK_OCP_CUR" != "$CHECK_OCP_LV" ]; then
+                echo "prefix opencode: ${CHECK_OCP_CUR:-未知} → 将更新到 $CHECK_OCP_LV (latest)"
+            else
+                echo "prefix opencode: ${CHECK_OCP_CUR:-未知}（已是最新，或 latest 解析失败将沿用）"
+            fi
+        else
+            echo "prefix opencode: ${CHECK_OCP_CUR:-未知} → 将安装/更新到 $OPENCODE_VERSION"
+        fi
+    elif [ "$FORCE_OPENCODE" = 1 ]; then
         echo "系统 opencode: ${SYS_OPENCODE_VER:-未安装}（已强制安装到 prefix，忽略系统版本）"
     else
         echo "系统 opencode: ${SYS_OPENCODE_VER:-未安装}（要求 >= $OPENCODE_MIN）→ $([ "$SYS_OPENCODE" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
@@ -241,13 +266,6 @@ if [ "$CHECK_ONLY" = 1 ]; then
         fi
     else
         echo "openchamber:   ${CHECK_OC_CUR:-未安装} → 将安装/更新到 $PACKAGE_VERSION"
-    fi
-    if [ "$SYS_OPENCODE" = 0 ] && [ "$OPENCODE_VERSION" = "latest" ] && [ -x "$PREFIX/bin/opencode" ]; then
-        CHECK_OC_INST="$("$PREFIX/bin/opencode" --version 2>/dev/null | parse_version)"
-        CHECK_OC_LV="$(resolve_latest "$OPENCODE_PACKAGE")"
-        if [ -n "$CHECK_OC_LV" ] && [ -n "$CHECK_OC_INST" ] && [ "$CHECK_OC_INST" != "$CHECK_OC_LV" ]; then
-            echo "prefix opencode: $CHECK_OC_INST → 将更新到 $CHECK_OC_LV (latest)"
-        fi
     fi
     if [ "$WITH_OC_CONFIG" = 1 ]; then
         echo "OpenCode 配置: 复制 $REPO_ROOT/config/opencode-config.json -> $OC_CONFIG_DIR/opencode.json"
@@ -350,30 +368,33 @@ if [ "$SYS_OPENCODE" = 1 ]; then
     log "使用系统 opencode v$SYS_OPENCODE_VER（>= $OPENCODE_MIN）"
 else
     INSTALLED_OPENCODE="$PREFIX/bin/opencode"
+    CURRENT_OPENCODE_VER=""
+    LATEST_OPENCODE_VER=""
     REUSE_OPENCODE=0
-    if [ -x "$INSTALLED_OPENCODE" ]; then
-        CURRENT_OPENCODE_VER="$("$INSTALLED_OPENCODE" --version 2>/dev/null | parse_version)"
-        if [ "$OPENCODE_VERSION" = "latest" ]; then
-            # 与 OpenChamber 同步：prefix opencode 与 registry latest 一致才复用
-            # （latest 解析失败时不中断，优先复用已装版本）
-            LATEST_OPENCODE_VER="$(resolve_latest "$OPENCODE_PACKAGE")"
-            if [ -z "$LATEST_OPENCODE_VER" ] || [ "$CURRENT_OPENCODE_VER" = "$LATEST_OPENCODE_VER" ]; then
-                REUSE_OPENCODE=1
-            fi
-        elif [ "$CURRENT_OPENCODE_VER" = "$OPENCODE_VERSION" ]; then
+    [ -x "$INSTALLED_OPENCODE" ] && CURRENT_OPENCODE_VER="$("$INSTALLED_OPENCODE" --version 2>/dev/null | parse_version)"
+    if [ "$OPENCODE_VERSION" = "latest" ]; then
+        # 与 OpenChamber 同步：prefix opencode 与 registry latest 一致才复用
+        LATEST_OPENCODE_VER="$(resolve_latest "$OPENCODE_PACKAGE")"
+        if [ -n "$LATEST_OPENCODE_VER" ] && [ "$CURRENT_OPENCODE_VER" = "$LATEST_OPENCODE_VER" ]; then
+            REUSE_OPENCODE=1
+        elif [ -z "$LATEST_OPENCODE_VER" ] && [ -n "$CURRENT_OPENCODE_VER" ]; then
+            # latest 解析失败（registry 不可达）：不中断，沿用已装版本
             REUSE_OPENCODE=1
         fi
+    elif [ -n "$CURRENT_OPENCODE_VER" ] && [ "$CURRENT_OPENCODE_VER" = "$OPENCODE_VERSION" ]; then
+        REUSE_OPENCODE=1
     fi
 
     if [ "$REUSE_OPENCODE" = 1 ]; then
         log "使用已有 $INSTALLED_OPENCODE（$("$INSTALLED_OPENCODE" --version)）"
     else
         if [ "$OPENCODE_VERSION" = "latest" ]; then
+            [ -n "$LATEST_OPENCODE_VER" ] || die "无法解析 $OPENCODE_PACKAGE 的 latest 版本（registry 不可达？可稍后重试）"
             OPENCODE_INSTALL_SPEC="$OPENCODE_PACKAGE@$LATEST_OPENCODE_VER"
             if [ -n "$CURRENT_OPENCODE_VER" ]; then
-                log "系统 opencode 不可用或低于 $OPENCODE_MIN，更新 $OPENCODE_PACKAGE: $CURRENT_OPENCODE_VER -> $LATEST_OPENCODE_VER"
+                log "更新 prefix opencode $OPENCODE_PACKAGE: $CURRENT_OPENCODE_VER -> $LATEST_OPENCODE_VER"
             else
-                log "系统 opencode 不可用或低于 $OPENCODE_MIN，安装 $OPENCODE_PACKAGE@$LATEST_OPENCODE_VER 到 $PREFIX"
+                log "安装 $OPENCODE_PACKAGE@$LATEST_OPENCODE_VER 到 $PREFIX"
             fi
         else
             OPENCODE_INSTALL_SPEC="$OPENCODE_PACKAGE@$OPENCODE_VERSION"
