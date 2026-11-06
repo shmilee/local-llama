@@ -101,6 +101,11 @@
    - Gemma, <https://huggingface.co/ggml-org/embeddinggemma-300M-GGUF>
    - `embeddinggemma-300M-Q8_0.gguf`
 
+7. Z-Image, 文生图
+   - <https://huggingface.co/unsloth/Z-Image-Turbo-GGUF>, `z-image-turbo-Q4_K_M.gguf`
+   - <https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF>, `Qwen3-4B-Instruct-2507-Q4_K_M.gguf`
+   - <https://huggingface.co/black-forest-labs/FLUX.1-schnell>, `ae.safetensors`
+
 ## hf account & token
 
 * 说明:
@@ -220,6 +225,13 @@ hf download --local-dir ./Embedding ggml-org/embeddinggemma-300m-GGUF \
 hf download --local-dir ./Embedding batiai/Qwen3-VL-Embedding-2B-GGUF \
     Qwen3-VL-Embedding-2B-Q8_0.gguf
 ```
+
+```
+hf download --local-dir ./Z-Image-Turbo hf://unsloth/Z-Image-Turbo-GGUF/z-image-turbo-Q4_K_M.gguf
+hf download --local-dir ./Z-Image-Turbo hf://unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+hf download --local-dir ./Z-Image-Turbo hf://black-forest-labs/FLUX.1-schnell/ae.safetensors
+```
+
 
 ## Chat-Templates
 

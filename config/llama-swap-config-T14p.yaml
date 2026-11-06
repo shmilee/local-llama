@@ -480,6 +480,48 @@ models:
       reranker: false
       context: 32768
 
+  # 5. z3 — Z-Image Turbo T2I（sd.cpp server）
+  # - 引擎: sdcpp-vulkan pixi 环境源码构建的 sd-server（Vulkan，Intel Arc iGPU），
+  #   --offload-to-cpu 混合 offload，实测配方 512x512 / 8 steps（见 docs/sd.cpp.md）
+  # - API: SDAPI /sdapi/v1/txt2img（llama-swap 一等公民支持）；sd-server 同时
+  #   内置 OpenAI /v1/images/generations，两种形态都可用
+  # - 权重: docs/models.md「7. Z-Image, 文生图」下载记录
+  "Z-Image-Turbo":
+    cmd: |
+      taskset -c 0-7 pixi run -m ${env.HOME}/local-llama -e sdcpp-vulkan sd-server
+      --listen-ip 127.0.0.1 --listen-port ${PORT}
+      --diffusion-model ${models_dir}/Z-Image-Turbo/z-image-turbo-Q4_K_M.gguf
+      --vae ${models_dir}/Z-Image-Turbo/ae.safetensors
+      --llm ${models_dir}/Z-Image-Turbo/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+      --offload-to-cpu
+    description: "T2I model (6B DiT, 8 steps) from Aliyun Z-Image, sd.cpp Vulkan (iGPU + CPU offload)"
+    metadata:
+      port: ${PORT}
+      note: "The ${MODEL_ID} is running on port ${PORT}, SDAPI txt2img, 512x512 default"
+    ttl: 36000 # 10h
+    filters:
+      setParamsByID:
+        # SDAPI 请求体字段（sd.cpp routes_sdapi.cpp 解析的字段名）；
+        # 集显 + CPU offload 性能取向的默认值
+        "${MODEL_ID}":
+          steps: 8
+          cfg_scale: 1.0
+          sampler_name: euler
+          width: 512
+          height: 512
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 1800 # 30min 集显 T2I 出图慢（冷加载 + 8 steps 512x512）
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text]
+      out: [image]
+      tools: false
+      reranker: false
+
 
 # hooks: a dictionary of event triggers and actions
 # - optional, default: empty dictionary
@@ -551,6 +593,7 @@ routing:
           g26: Gemma4-26B-A4B
           tyA: Toy-A
           tyB: Toy-B
+          z3: Z-Image-Turbo
 
         # evict_costs: relative cost of losing a running model (default: 1)
         evict_costs:
@@ -558,6 +601,7 @@ routing:
           g26: 26
           tyA: 2
           tyB: 2
+          z3: 12   # ~15G GGUF mmap 加载，快于 LLM 但非 trivial
 
         # sets: named combinations of models that may run together.
         # Each value is an expression built from these operators:
@@ -574,8 +618,9 @@ routing:
         #   "(a | b) & (c | d)"  → [a,c], [a,d], [b,c], [b,d]
         #   "+llms & v"          → inline the llms set, then AND with v
         sets:
-          # LLM switching
-          standard: "q35 | g26"
+          # LLM 与 T2I 切换（CPU 机器：sd.cpp 吃满 8 核 + UMA 内存，
+          # 与 LLM 无法共存，必须互斥切换）
+          standard: "q35 | g26 | z3"
 
   # scheduler: how queued requests are ordered.
   # The default and only valid scheduler is "fifo"
