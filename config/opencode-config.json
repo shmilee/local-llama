@@ -125,7 +125,7 @@
       }
     }
   },
-  "plugins": ["oh-my-opencode-slim"],
+  "plugins": ["oh-my-opencode-slim", "opencode-mem@latest"],
   "agents": {
     "explore": { "disabled": true },
     "general": { "disabled": true }
