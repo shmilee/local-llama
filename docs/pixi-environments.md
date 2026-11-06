@@ -1,6 +1,6 @@
 # pixi 环境
 
-`pixi.toml` 管理三个推理环境（llama.cpp / vLLM / SGLang），
+`pixi.toml` 管理四个推理环境（llama.cpp / vLLM / SGLang / stable-diffusion.cpp），
 全部源码或 PyPI 安装，系统依赖最小化（CUDA 环境仅依赖 NVIDIA 驱动）。
 
 ## 环境一览
@@ -11,6 +11,7 @@
 | `llamacpp-vulkan`| `llama-base` + `llamacpp-vulkan` | Vulkan | conda 工具链 + llama.cpp 源码编译 |
 | `vllm-cuda`      | `vllm-cuda`                      | CUDA 13| PyPI（vLLM + torch cu130） |
 | `sglang-cuda`    | `sglang-cuda`                    | CUDA 13| PyPI（SGLang + torch cu130） |
+| `sdcpp-vulkan`   | `sdcpp-base` + `sdcpp-vulkan`    | Vulkan | conda 工具链 + sd.cpp 源码编译 |
 
 ## 常用命令
 
@@ -30,6 +31,12 @@ pixi run   -e vllm-cuda vllm-cuda-verify    # 验证（import/CUDA + 工具链 +
 pixi install -e sglang-cuda
 pixi run   -e sglang-cuda sglang-cuda-prepare
 pixi run   -e sglang-cuda sglang-cuda-verify    # 验证（版本 + 设备 + 工具链信息展示）
+
+# stable-diffusion.cpp（Vulkan；源码获取的多源重试细节见 docs/sd.cpp.md）
+pixi install -e sdcpp-vulkan
+pixi run   -e sdcpp-vulkan sdcpp-build
+pixi run   -e sdcpp-vulkan sdcpp-verify
+pixi run   -e sdcpp-vulkan sdcpp-path
 ```
 
 verify 脚本缺 CUDA 布局时会自动调用 prepare。

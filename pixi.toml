@@ -12,6 +12,11 @@
 #   pixi run -e llamacpp-vulkan llamacpp-verify
 #   pixi run -e llamacpp-vulkan llamacpp-path
 #
+#   pixi install -e sdcpp-vulkan           # 安装 stable-diffusion.cpp Vulkan 环境
+#   pixi run -e sdcpp-vulkan sdcpp-build
+#   pixi run -e sdcpp-vulkan sdcpp-verify
+#   pixi run -e sdcpp-vulkan sdcpp-path
+#
 #   pixi install -e vllm-cuda              # 安装 vLLM 环境（PyPI 最新版 + torch cu130）
 #   pixi run -e vllm-cuda vllm-cuda-prepare      # 整理 pip nvidia 包为标准 CUDA toolkit 布局
 #   pixi run -e vllm-cuda vllm-cuda-verify       # 验证安装（import/CUDA + 工具链 + flashinfer JIT）
@@ -164,6 +169,66 @@ shaderc = "*"                 # 提供 glslc，编译 GLSL 着色器
 LLAMACPP_BACKEND = "vulkan"
 
 
+# ============================================================
+# Feature: stable-diffusion.cpp 公共基础
+# （编译工具、编译器、版本变量、共用任务）
+# 结构与 llama-base 对齐；sd.cpp 无 HTTP/UI 运行依赖，
+# 故不需要 libcurl / openssl（sd-server 用内置 httplib）。
+# ============================================================
+[feature.sdcpp-base.dependencies]
+cmake = ">=3.24"
+ninja = ">=1.11"
+gcc_linux-64 = ">=13"
+gxx_linux-64 = ">=13"
+libgomp = "*"
+
+[feature.sdcpp-base.activation.env]
+# 让 CMake 优先在 pixi 环境内查找依赖，而不是系统路径
+CMAKE_PREFIX_PATH = "$CONDA_PREFIX"
+
+# stable-diffusion.cpp 版本号（对应 GitHub release tag，master-NNNN-<sha> 风格）
+SDCPP_VERSION = "master-1014-012c7f8"
+# 注意：SDCPP_BACKEND 只在各后端 feature 中定义（与 LLAMACPP_BACKEND 同理，
+# 多个 feature 定义同名环境变量时 feature 列表靠前者获胜）
+# SDCPP_BUILD_DIR 为可选覆盖项（sdcpp-build.sh 默认派生 build-$BACKEND）
+
+[feature.sdcpp-base.tasks]
+# 下载 + 解压源码到 download/（幂等，可重复执行）
+sdcpp-src = "bash $PIXI_PROJECT_ROOT/scripts/sdcpp-src.sh"
+
+# 打印 sd-cli 绝对路径
+sdcpp-path = "which sd-cli"
+
+# 编译 + 安装（安装到 $CONDA_PREFIX/bin，静态库，二进制自包含）
+# 后端由 $SDCPP_BACKEND 自动区分（各 backend feature 单独定义）
+[feature.sdcpp-base.tasks.sdcpp-build]
+depends-on = ["sdcpp-src"]
+cmd = "bash $PIXI_PROJECT_ROOT/scripts/sdcpp-build.sh"
+
+# 验证安装：bin 存在 + --version + 运行时能检测到对应后端 GPU
+[feature.sdcpp-base.tasks.sdcpp-verify]
+cmd = "bash $PIXI_PROJECT_ROOT/scripts/sdcpp-verify.sh"
+
+
+# ============================================================
+# Feature: stable-diffusion.cpp (Vulkan, 源码编译)
+# ============================================================
+[feature.sdcpp-vulkan]
+platforms = ["linux-64"]
+
+[feature.sdcpp-vulkan.dependencies]
+# --- Vulkan 编译与运行时依赖 ---
+libvulkan-loader = "*"        # Vulkan ICD 加载器（运行时）
+libvulkan-headers = "*"
+spirv-headers = "*"
+spirv-tools = "*"
+shaderc = "*"                  # 提供 glslc，编译 GLSL 着色器
+
+[feature.sdcpp-vulkan.activation.env]
+# 后端标识（共用任务 sdcpp-build / sdcpp-verify 据此区分）
+SDCPP_BACKEND = "vulkan"
+
+
 
 # ============================================================
 # Feature: vLLM (PyPI, CUDA 13 后端)
@@ -303,5 +368,6 @@ sglang-cuda-verify = "bash $PIXI_PROJECT_ROOT/scripts/sglang-cuda-verify.sh"
 [environments]
 llamacpp-cuda = { features = ["llama-base", "llamacpp-cuda"], solve-group = "llamacpp-cuda" }
 llamacpp-vulkan = { features = ["llama-base", "llamacpp-vulkan"], solve-group = "llamacpp-vulkan" }
+sdcpp-vulkan = { features = ["sdcpp-base", "sdcpp-vulkan"], solve-group = "sdcpp-vulkan" }
 vllm-cuda = { features = ["vllm-cuda"], solve-group = "vllm-cuda" }
 sglang-cuda = { features = ["sglang-cuda"], solve-group = "sglang-cuda" }
