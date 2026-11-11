@@ -49,3 +49,21 @@ fi
 
 NVCC_VER=$("$ROOT/bin/nvcc" --version 2>/dev/null | grep -oP 'release \K[0-9.]+' | head -1)
 echo "CUDA_HOME ready: $ROOT (nvcc ${NVCC_VER:-unknown})"
+
+# 预拉取 flashinfer 预编译 kernel（vLLM >=0.33 的官方方式，幂等）：
+#   flashinfer-cubin（~1.6GB，GitHub release）+ flashinfer-jit-cache。
+# 不预拉时首次启动退化为 JIT 编译，多花几分钟（功能等价）。
+# 依赖 pixi 任务环境提供的 vllm 可执行文件与 pip（vllm download-kernels
+# 内部走 `python -m pip install`）。
+# 失败不致命：GitHub release CDN 在部分网络（国内直连）下不可达，
+# 此时回退 JIT 即可，故给 timeout 并以 WARN 结束。
+if command -v vllm >/dev/null 2>&1; then
+    if timeout 900 vllm download-kernels; then
+        echo "flashinfer 预编译 kernel 已就绪（首启免 JIT 编译）"
+    else
+        echo "WARN: vllm download-kernels 失败/超时（flashinfer-cubin 来自 GitHub release，"
+        echo "      网络不通时属预期）——首次启动回退 JIT 编译，功能不受影响"
+    fi
+else
+    echo "WARN: vllm 不在 PATH，跳过 download-kernels（JIT 编译仍可用）"
+fi

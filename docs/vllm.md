@@ -4,9 +4,9 @@
 安装与验证见 `docs/pixi-environments.md`。
 recipe 参考: <https://recipes.vllm.ai/Qwen/Qwen3.8-27B?hardware=rtx_pro_6000>
 
-## 版本 pin（vLLM 0.30.0）
+## 版本 pin（vLLM 0.33.0）
 
-* 严格 pin `torch==2.13.0 / torchaudio==2.11.0 / torchvision==0.28.0 / torchcodec>=0.14`
+* 严格 pin `torch==2.14.0 / torchaudio==2.11.0 / torchvision==0.29.0 / torchcodec>=0.14`
   （cu130 构建，`+cu130` 本地版本号）。
 * torch wheel 依赖的 `nvidia-*-cu13` pip 包自带 CUDA 运行时/头文件/nvcc，
   环境内不依赖系统 `/usr/local/cuda`，唯一系统依赖是 NVIDIA 驱动（`libcuda.so.1`）。
