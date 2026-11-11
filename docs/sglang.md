@@ -4,14 +4,16 @@
 安装与验证见 `docs/pixi-environments.md`。
 recipe 参考: <https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.8>
 
-## 版本 pin（SGLang 0.5.20）
+## 版本 pin（SGLang 0.5.23）
 
-* 核心 pin：`torch==2.13.0 / torchaudio==2.11.0 / torchcodec==0.15.0 /
-  transformers==5.12.1`、`sglang-kernel==0.4.7`（abi3 单 wheel，不分 CUDA
-  版本，依赖仅 `torch==2.13.0`）、`flashinfer_python[cu13]==0.6.18`
-  （cu13 extra 直接拉 CUDA 13 构建）、`cuda-tile==1.6.0rc5`（预发布版，
-  需 feature 级 `prerelease-mode = "allow"`）。
-* **sglang 与 vllm 的 transformers/torchcodec pin 冲突**，必须各自独立
+* 核心 pin：`torch==2.14.1 / torchaudio==2.11.0 / torchcodec==0.17.0 /
+  transformers==5.19.0`、`sglang-kernel==0.4.10`（abi3 单 wheel，不分
+  CUDA 版本，依赖仅 `torch==2.14.1`）、`flashinfer_python[cu13]==0.7.2`
+  （cu13 extra 直接拉 CUDA 13 构建）。torchvision 取匹配 torch 2.14.1 的
+  0.29.1（sglang 对其无 pin）。`cuda-tile`（经 flashinfer `>=1.4.0` 拉入）
+  现为 1.8.0 wheel，不再需要预发布版；依赖树中的 `flash-attn-4` b 系列
+  仍需 feature 级 `prerelease-mode = "allow"`。
+* **sglang 与 vllm 的 torch/torchcodec pin 冲突**，必须各自独立
   solve-group，不能合并成一个环境。
 * 入口：官方推荐 `sglang serve --model-path ...`（`python -m sglang.launch_server`
   已弃用但兼容）。压测：`python -m sglang.benchmark.serving`
@@ -141,7 +143,7 @@ CausalConv1d）。
    运行时用 nvcc 编译，工具链取自 `CUDA_HOME`（`sglang-cuda-prepare`
    生成的 `$CONDA_PREFIX/sglang-cuda/` 布局）与 `CXX`。
 2. **CCCL 版本一致性检查**：sglang 的 JIT **不读取** flashinfer 的
-   `FLASHINFER_EXTRA_CUDAFLAGS`，nvcc (13.4) 与 CCCL 头文件 (13.0) 的
+   `FLASHINFER_EXTRA_CUDAFLAGS`，nvcc (13.5) 与 CCCL 头文件 (13.0) 的
    检查误报会直接编译失败。解法：`sglang-cuda-prepare` 把布局里的 `nvcc`
    替换为 wrapper 脚本，向每次编译注入
    `-DCCCL_DISABLE_CTK_COMPATIBILITY_CHECK`（官方关闭 define，

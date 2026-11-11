@@ -105,7 +105,7 @@ verify 脚本缺 CUDA 布局时会自动调用 prepare。
 * feature 级 `[feature.X.pypi-options]` 单值字段覆盖 workspace，
   列表字段（`find-links`、`extra-index-urls`）与 workspace 合并。
 * conda-forge 的 g++ 无裸名符号链接，须用 `x86_64-conda-linux-gnu-g++`。
-* 预发布依赖：sglang 硬 pin `cuda-tile==1.6.0rc5`，
+* 预发布依赖：sglang 依赖树含 `flash-attn-4` 的 b 系列预发布版，
   `[feature.sglang-cuda.pypi-options] prerelease-mode = "allow"`。
 
 ## lock 文件

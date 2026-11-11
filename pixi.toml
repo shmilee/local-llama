@@ -335,11 +335,11 @@ vllm-cuda-verify = "bash $PIXI_PROJECT_ROOT/scripts/vllm-cuda-verify.sh"
 # （$CONDA_PREFIX/sglang-cuda/{bin,include,lib,lib64}），供 flashinfer
 # JIT 按 CUDA_HOME 查找 nvcc、头文件与库。
 #
-# SGLang 0.5.20 的 pin：torch==2.13.0 / torchaudio==2.11.0 /
-# torchcodec==0.15.0 / transformers==5.12.1 / sglang-kernel==0.4.7 /
-# flashinfer_python[cu13]==0.6.18（cu13 extra 直接拉 CUDA 13 构建）。
-# sglang-kernel 是 abi3 单 wheel（不分 CUDA 版本），依赖仅 torch==2.13.0。
-# 注意：sglang 与 vllm 的 transformers/torchcodec pin 不同，
+# SGLang 0.5.23 的 pin：torch==2.14.1 / torchaudio==2.11.0 /
+# torchcodec==0.17.0 / transformers==5.19.0 / sglang-kernel==0.4.10 /
+# flashinfer_python[cu13]==0.7.2（cu13 extra 直接拉 CUDA 13 构建）。
+# sglang-kernel 是 abi3 单 wheel（不分 CUDA 版本），依赖仅 torch==2.14.1。
+# 注意：sglang 与 vllm 的 torch/torchcodec pin 不同，
 #       必须各自独立 solve-group。
 # ============================================================
 [feature.sglang-cuda]
@@ -366,22 +366,23 @@ CXX = "x86_64-conda-linux-gnu-g++"
 # flashinfer 对 SM12.x 默认要求 CUDA>=12.9（compute_120f）。
 # 显式指定 12.0a 匹配 Blackwell (SM120) 硬件。
 FLASHINFER_CUDA_ARCH_LIST = "12.0a"
-# PyPI 的 nvidia-cuda-nvcc (13.4) 与 nvidia-cuda-runtime (13.0) 版本独立，
+# PyPI 的 nvidia-cuda-nvcc (13.5) 与 nvidia-cuda-runtime (13.0) 版本独立，
 # CCCL 头文件的编译器/工具链 minor 一致性检查会误报。
-# 用官方 define 关闭（13.4 编译 13.0 头文件无实际兼容问题）。
+# 用官方 define 关闭（13.5 编译 13.0 头文件无实际兼容问题）。
 FLASHINFER_EXTRA_CUDAFLAGS = "-DCCCL_DISABLE_CTK_COMPATIBILITY_CHECK"
 
 [feature.sglang-cuda.pypi-dependencies]
-sglang = ">=0.5.20,<0.6"
-# torch 系四件套：版本与 SGLang 的 pin 一致。
+sglang = ">=0.5.23,<0.6"
+# torch 系四件套：版本与 SGLang 的 pin 一致（torchvision 取匹配
+# torch 2.14.1 的 0.29.1；sglang 对 torchvision 无 pin）。
 # cu130 wheel 通过 workspace 级 [pypi-options] 的 find-links 从国内镜像取
 # （等价 pip --find-links），不走 index。
-torch = { version = "==2.13.0+cu130" }
+torch = { version = "==2.14.1+cu130" }
 torchaudio = { version = "==2.11.0+cu130" }
-torchvision = { version = "==0.28.0+cu130" }
-torchcodec = { version = "==0.15.0+cu130" }
+torchvision = { version = "==0.29.1+cu130" }
+torchcodec = { version = "==0.17.0+cu130" }
 
-# sglang 0.5.20 硬 pin 预发布版 cuda-tile==1.6.0rc5，必须放开 pre-release
+# 依赖树中存在预发布版（如 flash-attn-4 的 b 系列），必须放开 pre-release
 [feature.sglang-cuda.pypi-options]
 prerelease-mode = "allow"
 
