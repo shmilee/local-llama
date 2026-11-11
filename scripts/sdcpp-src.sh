@@ -126,4 +126,53 @@ ensure_ggml() {
 }
 ensure_ggml
 
+# --- cutlass 子模块补全（仅 CUDA 后端）---
+# 1086 起 CUDA 后端默认要求 thirdparty/cutlass（INT8/W4/BF16 GEMM + CuTe
+# attention 的快速内核，上游标注 tested with 3.9.2），头文件缺失时 CMake
+# FATAL。GitHub tarball 不含子模块内容，故对 cuda 后端从 API 解析 pin 的
+# commit 后多源下载对应 archive 补入（与 ensure_ggml 同模式）。
+# vulkan 后端不使用 cutlass，跳过以免无谓大下载。
+ensure_cutlass() {
+    [ "${SDCPP_BACKEND:-}" = "cuda" ] || return 0
+    local cut_dir="$SRC_DIR/thirdparty/cutlass"
+    # 与上游 cutlass.cmake 的完整性检查一致的判定（两个关键头文件）
+    if [ -f "$cut_dir/include/cutlass/gemm/kernel/default_gemm_universal_with_visitor.h" ] \
+       && [ -f "$cut_dir/include/cute/tensor.hpp" ]; then
+        echo "[sdcpp-src] cutlass 已就位"
+        return 0
+    fi
+    local sha
+    sha=$(curl -fsSL --http1.1 --max-time 30 \
+        "https://api.github.com/repos/leejet/stable-diffusion.cpp/contents/thirdparty/cutlass?ref=$SDCPP_VERSION" \
+        | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['sha'] if d['type']=='submodule' else '')" 2>/dev/null)
+    if [ -z "$sha" ]; then
+        echo "FATAL: 无法解析 cutlass submodule pin（API 不可达？），且本地 thirdparty/cutlass 为空" >&2
+        return 1
+    fi
+    local cbase="https://github.com/NVIDIA/cutlass/archive/$sha.tar.gz"
+    local csources=("$cbase" "https://gh-proxy.com/$cbase" "https://ghfast.top/$cbase")
+    local ctmp="$DL_DIR/cutlass-$sha.tar.gz"
+    if [ ! -f "$ctmp" ] || ! gzip -t "$ctmp" 2>/dev/null; then
+        rm -f "$ctmp" "$ctmp.part"
+        local cok=1
+        for gurl in "${csources[@]}"; do
+            if try_download_url "$gurl" "$ctmp" "cutlass"; then cok=0; break; fi
+        done
+        [ "$cok" -eq 0 ] || { echo "FATAL: cutlass archive 所有源均失败（可手动下载 $cbase 到 $ctmp 后重试）" >&2; return 1; }
+    fi
+    # 解压并落位（archive 顶层为 cutlass-<sha>/）
+    local cwork="$DL_DIR/.cutlass-extract"
+    rm -rf "$cwork" "$cut_dir"
+    mkdir -p "$cwork"
+    tar -xzf "$ctmp" -C "$cwork"
+    mv "$cwork"/cutlass-* "$cut_dir"
+    rmdir "$cwork"
+    [ -f "$cut_dir/include/cutlass/gemm/kernel/default_gemm_universal_with_visitor.h" ] \
+        && [ -f "$cut_dir/include/cute/tensor.hpp" ] \
+        || { echo "FATAL: cutlass 落位后仍缺关键头文件" >&2; return 1; }
+    echo "[sdcpp-src] cutlass 子模块已补全: $sha"
+    return 0
+}
+ensure_cutlass
+
 echo "source ready: $SRC_DIR"

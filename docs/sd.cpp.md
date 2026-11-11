@@ -11,18 +11,22 @@
 
 ### pixi 源码编译（本仓库）
 
-`pixi.toml` 的 `sdcpp-vulkan` 环境（Vulkan 后端，T14p 核显；CUDA 后端环境 `sdcpp-cuda`
-预留给 PRO6000，结构相同）：
+`pixi.toml` 的 `sdcpp-vulkan`（T14p 集显）/ `sdcpp-cuda`（PRO6000 N 卡）
+环境，结构相同，命令换环境名即可：
 
 ```
 pixi install -e sdcpp-vulkan
 pixi run   -e sdcpp-vulkan sdcpp-build    # 拉取源码 + 编译 + 安装
 pixi run   -e sdcpp-vulkan sdcpp-verify   # 验证安装（bin + --version + GPU 设备）
 pixi run   -e sdcpp-vulkan sdcpp-path     # 打印 sd-cli 绝对路径
+
+pixi install -e sdcpp-cuda
+pixi run   -e sdcpp-cuda   sdcpp-build
+pixi run   -e sdcpp-cuda   sdcpp-verify
 ```
 
 版本与构建细节见 `pixi.toml` 的 feature 注释（当前
-`SDCPP_VERSION = "master-1014-012c7f8"`，2026-10-25 发布）。
+`SDCPP_VERSION = "master-1086-465adf3"`，2026-11-10 发布）。
 
 ### 源码获取（国内网络要点）
 
@@ -34,6 +38,9 @@ tarball ~7MB 处 EOF、git fetch-pack ~8MB 失败、gh-proxy 镜像 ~2.6MB 失�
 * 源顺序: GitHub 直连 → gh-proxy.com → ghfast.top（`SDCPP_TARBALL_URL` 可整体覆盖）
 * 每次失败删除 `.part` 半成品；下载后 `gzip -t`，解压后校验关键目录
 * 任一环节不通过都清场重来，任务幂等可重跑
+* tarball 不含 git 子模块：`ggml`（各后端必需）与 `cutlass`（仅 CUDA 后端，
+  1086 起 INT8/W4/BF16 GEMM + CuTe attention 依赖它，头文件缺失 CMake FATAL）
+  由脚本经 GitHub API 解析 pin 的 commit 后另行下载补入
 
 ## 构建选项（sdcpp-build.sh）
 
@@ -44,12 +51,15 @@ tarball ~7MB 处 EOF、git fetch-pack ~8MB 失败、gh-proxy 镜像 ~2.6MB 失�
 | `SD_SERVER_BUILD_FRONTEND` | OFF | 关闭 server Web 前端（pnpm/node 构建链），纯 API 服务 |
 | `SD_WEBP` / `SD_WEBM` | OFF | 不引入 libwebp/libwebm 子模块 |
 | `SD_BUILD_SHARED_LIBS` | OFF（默认） | 静态链接，sd-cli / sd-server 自包含 |
+| `SD_CUDA_CUTLASS_PATH` | `thirdparty/cutlass`（默认，1086 起） | CUDA 快速内核来源，
+  由 `sdcpp-src.sh` 补全子模块；设空串可整体禁用（W4/INT8 回退慢路径） |
 
 构建缓存防护与 `llamacpp-build.sh` 同构（编译器路径失效 + 工具链指纹）。
 
 ## sd-server 端点（llama-swap 集成点）
 
-源码 `examples/server/routes_*.cpp` 核实（master-1006-0886f11，1014 未变）:
+源码 `examples/server/routes_*.cpp` 核实（master-1006-0886f11 起路由文件集
+至 1086 未变）:
 
 * OpenAI 兼容: `GET /v1/models`、`POST /v1/images/generations`、`POST /v1/images/edits`
 * SDAPI 兼容: `POST /sdapi/v1/txt2img`、`POST /sdapi/v1/img2img`、

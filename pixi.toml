@@ -17,6 +17,11 @@
 #   pixi run -e sdcpp-vulkan sdcpp-verify
 #   pixi run -e sdcpp-vulkan sdcpp-path
 #
+#   pixi install -e sdcpp-cuda             # 安装 stable-diffusion.cpp CUDA 环境（需 N 卡）
+#   pixi run -e sdcpp-cuda sdcpp-build
+#   pixi run -e sdcpp-cuda sdcpp-verify
+#   pixi run -e sdcpp-cuda sdcpp-path
+#
 #   pixi install -e vllm-cuda              # 安装 vLLM 环境（PyPI 最新版 + torch cu130）
 #   pixi run -e vllm-cuda vllm-cuda-prepare      # 整理 pip nvidia 包为标准 CUDA toolkit 布局
 #   pixi run -e vllm-cuda vllm-cuda-verify       # 验证安装（import/CUDA + 工具链 + flashinfer JIT）
@@ -186,7 +191,7 @@ libgomp = "*"
 CMAKE_PREFIX_PATH = "$CONDA_PREFIX"
 
 # stable-diffusion.cpp 版本号（对应 GitHub release tag，master-NNNN-<sha> 风格）
-SDCPP_VERSION = "master-1014-012c7f8"
+SDCPP_VERSION = "master-1086-465adf3"
 # 注意：SDCPP_BACKEND 只在各后端 feature 中定义（与 LLAMACPP_BACKEND 同理，
 # 多个 feature 定义同名环境变量时 feature 列表靠前者获胜）
 # SDCPP_BUILD_DIR 为可选覆盖项（sdcpp-build.sh 默认派生 build-$BACKEND）
@@ -226,6 +231,31 @@ shaderc = "*"                  # 提供 glslc，编译 GLSL 着色器
 [feature.sdcpp-vulkan.activation.env]
 # 后端标识（共用任务 sdcpp-build / sdcpp-verify 据此区分）
 SDCPP_BACKEND = "vulkan"
+
+
+# ============================================================
+# Feature: stable-diffusion.cpp (CUDA, 源码编译)
+# ============================================================
+[feature.sdcpp-cuda]
+platforms = ["linux-64-cu13"]
+
+[feature.sdcpp-cuda.dependencies]
+# --- CUDA 编译栈（conda-forge 拆分包，pin 到 13.2 匹配平台声明）---
+# 依赖链与 llamacpp-cuda 相同：ggml-cuda 后端链接 CUDA::cudart /
+# CUDA::cublas / CUDA::cublasLt / CUDA::cuda_driver，sd.cpp 自身的
+# src/core/cuda 扩展另需 nvcc（enable_language(CUDA)）。
+cuda-version = "=13.2"
+# nvcc 编译器（$CONDA_PREFIX/bin/nvcc）
+cuda-nvcc = "*"
+# CUDA Runtime（ggml-cuda 与 sd-core 均链接 CUDA::cudart）
+cuda-cudart-dev = "*"
+# cuBLAS（ggml-cuda 无条件链接 CUDA::cublas；CUDA>=11.8 另有 CUDA::cublasLt）
+libcublas-dev = "*"
+
+[feature.sdcpp-cuda.activation.env]
+CUDACXX = "$CONDA_PREFIX/bin/nvcc"
+# 后端标识（共用任务 sdcpp-build / sdcpp-verify 据此区分）
+SDCPP_BACKEND = "cuda"
 
 
 
@@ -368,5 +398,6 @@ sglang-cuda-verify = "bash $PIXI_PROJECT_ROOT/scripts/sglang-cuda-verify.sh"
 llamacpp-cuda = { features = ["llama-base", "llamacpp-cuda"], solve-group = "llamacpp-cuda" }
 llamacpp-vulkan = { features = ["llama-base", "llamacpp-vulkan"], solve-group = "llamacpp-vulkan" }
 sdcpp-vulkan = { features = ["sdcpp-base", "sdcpp-vulkan"], solve-group = "sdcpp-vulkan" }
+sdcpp-cuda = { features = ["sdcpp-base", "sdcpp-cuda"], solve-group = "sdcpp-cuda" }
 vllm-cuda = { features = ["vllm-cuda"], solve-group = "vllm-cuda" }
 sglang-cuda = { features = ["sglang-cuda"], solve-group = "sglang-cuda" }

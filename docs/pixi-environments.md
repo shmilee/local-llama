@@ -12,6 +12,7 @@
 | `vllm-cuda`      | `vllm-cuda`                      | CUDA 13| PyPI（vLLM + torch cu130） |
 | `sglang-cuda`    | `sglang-cuda`                    | CUDA 13| PyPI（SGLang + torch cu130） |
 | `sdcpp-vulkan`   | `sdcpp-base` + `sdcpp-vulkan`    | Vulkan | conda 工具链 + sd.cpp 源码编译 |
+| `sdcpp-cuda`     | `sdcpp-base` + `sdcpp-cuda`      | CUDA   | conda 工具链 + sd.cpp 源码编译 |
 
 ## 常用命令
 
@@ -32,11 +33,16 @@ pixi install -e sglang-cuda
 pixi run   -e sglang-cuda sglang-cuda-prepare
 pixi run   -e sglang-cuda sglang-cuda-verify    # 验证（版本 + 设备 + 工具链信息展示）
 
-# stable-diffusion.cpp（Vulkan；源码获取的多源重试细节见 docs/sd.cpp.md）
+# stable-diffusion.cpp（Vulkan / CUDA；源码获取的多源重试细节见 docs/sd.cpp.md）
 pixi install -e sdcpp-vulkan
 pixi run   -e sdcpp-vulkan sdcpp-build
 pixi run   -e sdcpp-vulkan sdcpp-verify
 pixi run   -e sdcpp-vulkan sdcpp-path
+
+pixi install -e sdcpp-cuda      # 需 N 卡（PRO6000 等）
+pixi run   -e sdcpp-cuda   sdcpp-build
+pixi run   -e sdcpp-cuda   sdcpp-verify
+pixi run   -e sdcpp-cuda   sdcpp-path
 ```
 
 verify 脚本缺 CUDA 布局时会自动调用 prepare。
