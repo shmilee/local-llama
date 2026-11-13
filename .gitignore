@@ -20,3 +20,6 @@ local.env.bak*
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# strata 量化 pack（由源 GGUF 生成，见 docs/strata.md / scripts/strata-src.sh）
+strata-packs/

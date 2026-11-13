@@ -226,6 +226,23 @@ macros:
     --enable-metrics
     --enable-cache-report
 
+  # Strata DS4.1（pixi 环境 strata-cuda，Strata v0.2.4.2 / 引擎 0.1.49.2）
+  # run config: config/strata-ds41.json，GPU 4,6，512k 上下文。
+  # JSON 内路径全部相对仓库根目录（宏用 env -C 钉住工作目录）；
+  # pack 在 strata-packs/dsv41-iq2xxs（生成方法见 docs/strata.md）
+  "default-strata-ds41": >
+    env -C ${env.HOME}/local-llama
+    pixi run -m ${env.HOME}/local-llama -e strata-cuda strata serve
+    --config config/strata-ds41.json
+
+  # Strata Qwen3.8-Flash-Next（同环境，run config config/strata-qwen.json，
+  # 相对路径机制同上；pack 在 strata-packs/qwen38fn-iq3xxs；
+  # GPU 4 单卡，1M 上下文；PLE 表 mlock 进内存须配 --ple-io ram）
+  "default-strata-qwen": >
+    env -C ${env.HOME}/local-llama
+    pixi run -m ${env.HOME}/local-llama -e strata-cuda strata serve
+    --config config/strata-qwen.json
+
   # Example of environment variable macros
   # - ${env.VAR_NAME} pulls the value from the system environment
   # - useful for paths, secrets, or machine-specific configuration
@@ -1006,6 +1023,66 @@ models:
       tools: true
       reranker: false
       context: 262144
+
+  # 13. DeepSeek V4.1 Flash —— strata dsv41 后端（双卡 4,6 层切分，512k 上下文）
+  # - 模型：ISTA-DAS IQ2_XXS 2.00bpw（~131G）+ Engram（103G）+ DSpark drafter（7.5G），
+  #   只读 ${models_dir}/DeepSeek-V4.1-Flash/；pack 在 strata-packs/dsv41-iq2xxs（仓库根）
+  # - 引擎：strata-cuda 环境源码构建（v0.2.4.2，pin 原因见 docs/strata-prefill-regression.md）
+  # - 512k 为实测档（docs/strata.md）：显存零压力（KV 0.27G/卡），fresh prefill
+  #   一次性 ~4.5min（2048 tok/s），decode ~147 tok/s
+  "DeepSeek-V4.1-Flash":
+    cmd: |
+      ${default-strata-ds41}
+      --port ${PORT}
+    description: "MoE (ISTA-DAS IQ2_XXS 2.00bpw, 233GB) via Strata dsv41 engine, 2x PRO6000 (GPU 4,6)"
+    metadata:
+      port: ${PORT}
+      note: "strata-dsv41 GPUs 4,6, context=524288"
+    ttl: 36000
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 900
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: false
+      reranker: false
+      context: 524288
+    sendLoadingState: true
+
+  # 14. Qwen3.8-Flash-Next —— strata flash_next 后端（单卡 3，1M 上下文）
+  # - 模型：ISTA-DAS IQ3_XXS（71G，2 分片）+ PLE 表（shard 2，26.8GiB mlock）；
+  #   只读 ${models_dir}/Qwen3.8-Flash-Next/IQ3_XXS/，pack 在
+  #   strata-packs/qwen38fn-iq3xxs（仓库根）
+  # - 与现有 "Qwen3.8-Flash-Next"（llama.cpp UD-IQ4_XS，GPU 6，256k）是不同
+  #   后端/量化/卡位，可并存切换
+  # - 实测（docs/strata.md）：1M prefill 4349 tok/s（~4min）、decode @1M
+  #   161.5 tok/s、显存 72G/96G；RAM 驻留 ~115G（PLE mlock + 专家 arena）
+  "Qwen3.8-Flash-Next-Strata":
+    cmd: |
+      ${default-strata-qwen}
+      --port ${PORT}
+    description: "MoE (ISTA-DAS IQ3_XXS, 71GB) via Strata flash_next engine, 1x PRO6000 (GPU 3), 1M ctx"
+    metadata:
+      port: ${PORT}
+      note: "strata-engine GPU 3, context=1048576, PLE mlocked in RAM"
+    ttl: 36000
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 900
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text]
+      out: [text]
+      tools: false
+      reranker: false
+      context: 1048576
+    sendLoadingState: true
 
 
 # hooks: a dictionary of event triggers and actions

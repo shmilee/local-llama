@@ -234,6 +234,36 @@ DS4_SPLIT=19,21 strata-dsv41 --pack <pack_dir> --ids @<ids文件> --n 300 \
 
 ---
 
+## llama-swap 集成（PRO6000 配置）
+
+两个模型已加入 `config/llama-swap-config-PRO6000.yaml`（`strata serve`
+终端 server 提供 OpenAI 兼容 API，run config JSON 在 `config/`）：
+
+| 模型键 | 引擎 | 卡 | 上下文 | run config |
+| --- | --- | --- | --- | --- |
+| `DeepSeek-V4.1-Flash` | strata-dsv41（IQ2_XXS 233G + Engram + DSpark） | 4,6 | 524288 | `config/strata-ds41.json` |
+| `Qwen3.8-Flash-Next-Strata` | strata-engine（IQ3_XXS 71G） | 3 | **1048576** | `config/strata-qwen.json` |
+
+* 终端 server 任意 model name / API key 可用；llama-swap 按需拉起
+  （`healthCheckTimeout` 给足：dsv41 冷加载 ~15min）。
+* **run config JSON 无变量替换**（纯 `json.loads`），但所有路径可写相对：
+  终端 server 以自身 cwd 解析 `--config`、`exe`、`tokenizer`、`log`，引擎
+  进程以 config 的 `cwd`（此处 `"."`）解析 `--pack`/`--expert-profile` 等
+  args。宏里 `env -C ${env.HOME}/local-llama` 把工作目录钉在仓库根
+  （llama-swap 直接 exec 不走 shell，`cd X &&` 不能用），JSON 里因此
+  没有任何机器相关绝对路径。
+* **Qwen 必须 `--ple-io ram`**：PLE 表在 HDD 上，direct 随机读只有
+  ~3MB/s（引擎自己的警告），ram = 26.8GiB mlock。
+* Qwen 1M 实测（GPU 3 单卡）：prefill 4349 tok/s（~4min）、
+  decode 161.5 tok/s @1M、显存 72.5G/96G（512k 时 212 tok/s）。
+  DFlash2 投机解码在 server 下自动生效。
+* DS4.1 512k 实测（GPU 4,6）：prefill 2048 tok/s（~4.5min）、
+  decode 147 tok/s；1M 整窗超线性退化（257 tok/s）故定 512k。
+* llama-swap 子进程 PATH 无 pixi 时 cmd 要用 `~/.pixi/bin/pixi`
+  绝对路径（生产 start 脚本环境有则可用裸 `pixi`）。
+* 测试记录：独立 llama-swap 实例（:18435，独立 sqlite）验证两模型
+  chat 全链路通过（2026-11-13）。
+
 ## 注意点汇总
 
 1. **先选空闲卡**。生产 llama-swap 在 2/6 号卡之间换模型，跑之前
@@ -261,5 +291,5 @@ DS4_SPLIT=19,21 strata-dsv41 --pack <pack_dir> --ids @<ids文件> --n 300 \
    `$CONDA_PREFIX/bin/strata-engine` 或 `strata-dsv41`），`strata launch`
    的组件流会从 feed 下预编译引擎——本机 GitHub 不可达，用不了那条路，
    以本地源码构建为准。
-8. **清理**：pack 目录（qwen 1.5G / dsv41 几 MB）用完可删，重生成很
-   快；模型文件永远只读。
+8. **清理**：pack 目录（仓库根 `strata-packs/`，qwen 1.5G / dsv41 几 MB，
+   已入 .gitignore）用完可删，重生成很快；模型文件永远只读。

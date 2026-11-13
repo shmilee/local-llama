@@ -1,0 +1,19 @@
+{
+  "exe": ".pixi/envs/strata-cuda/bin/strata-engine",
+  "args": ["--pack", "strata-packs/qwen38fn-iq3xxs",
+           "--native", "/data/huggingface-downloads/Qwen3.8-Flash-Next/IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00001-of-00002.gguf",
+           "--ple-gguf", "/data/huggingface-downloads/Qwen3.8-Flash-Next/IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00002-of-00002.gguf",
+           "--spec", "2", "--prefill", "auto", "--ple-io", "ram",
+           "--expert-profile", ".pixi/envs/strata-cuda/strata/data/expert-profile.bin",
+           "--max-context", "1048576"],
+  "cwd": ".",
+  "tokenizer": "strata-packs/qwen38fn-iq3xxs/tokenizer",
+  "model_name": "qwen3.8-flash-next",
+  "arch": "qwen4exp",
+  "log": "logs/strata-qwen.log",
+  "lib_dirs": [],
+  "port": 0,
+  "engine_ready_s": 3600,
+  "gpu": [4],
+  "gpus_asked": true
+}
