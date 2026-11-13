@@ -22,6 +22,11 @@
 #   pixi run -e sdcpp-cuda sdcpp-verify
 #   pixi run -e sdcpp-cuda sdcpp-path
 #
+#   pixi install -e strata-cuda            # 安装 Strata CUDA 环境（引擎 + Python 终端，需 N 卡 sm_75+）
+#   pixi run -e strata-cuda strata-build   # 下载源码并编译 + 安装（引擎/终端到 $CONDA_PREFIX）
+#   pixi run -e strata-cuda strata-verify  # 验证安装（--version + GPU 检测 + python 依赖）
+#   pixi run -e strata-cuda strata-path    # 打印 strata-engine 绝对路径
+#
 #   pixi install -e vllm-cuda              # 安装 vLLM 环境（PyPI 最新版 + torch cu130）
 #   pixi run -e vllm-cuda vllm-cuda-prepare      # 整理 pip nvidia 包为标准 CUDA toolkit 布局
 #   pixi run -e vllm-cuda vllm-cuda-verify       # 验证安装（import/CUDA + 工具链 + flashinfer JIT）
@@ -258,6 +263,106 @@ CUDACXX = "$CONDA_PREFIX/bin/nvcc"
 SDCPP_BACKEND = "cuda"
 
 
+# ============================================================
+# Feature: Strata 公共基础
+# （编译工具、编译器、版本变量、共用任务）
+# 结构与 llama-base 对齐。Strata 的 CUDA 引擎比 ggml-cuda 多一个
+# 独立 DSO（libstrata_kq，K-quant MMQ prompt kernels，引擎从自己的
+# 目录 dlopen 它），且仓库无 CMake install 规则，故需 patchelf 设置
+# RPATH 指向环境 lib。
+# ============================================================
+[feature.strata-base.dependencies]
+cmake = ">=3.24"
+ninja = ">=1.11"
+curl = "*"
+gcc_linux-64 = ">=13"
+gxx_linux-64 = ">=13"
+libgomp = "*"
+# Strata 引擎无 CMake install 规则：strata-build.sh 手动拷贝二进制后
+# 用 patchelf 把 RPATH 设为 $ORIGIN/../lib（环境内的 CUDA 运行库）
+patchelf = "*"
+
+[feature.strata-base.activation.env]
+# 让 CMake 优先在 pixi 环境内查找依赖，而不是系统路径
+CMAKE_PREFIX_PATH = "$CONDA_PREFIX"
+
+# Strata 版本号（对应 GitHub release tag）
+# 注意：pin 在 v0.2.4.2（引擎 0.1.49.x）——v0.2.13（引擎 0.1.59.x）的
+# dsv41 长上下文 prefill 有 10× 回归（本机 A/B 2220→225 tok/s，
+# 0.1.50-0.1.59 窗口引入，flag 无法规避），见 docs/strata-prefill-regression.md
+# 与上游 issue #5520（Qwen 引擎的独立回归）。上游修复并复测通过后再升级。
+STRATA_VERSION = "v0.2.4.2"
+# 说明：CMake 的 project VERSION 是引擎内部版本（0.1.49.x），
+#       v0.2.4.2 是发布版本（tag / 安装器 / strata --version 语义的"应用版本"）
+# STRATA_BUILD_DIR 为可选覆盖项（strata-build.sh 默认派生 build-$BACKEND）
+
+[feature.strata-base.tasks]
+# 下载 + 解压源码到 download/（幂等，可重复执行）
+strata-src = "bash $PIXI_PROJECT_ROOT/scripts/strata-src.sh"
+
+# 打印 strata-engine 绝对路径（strata-build 安装到 $CONDA_PREFIX/bin）
+strata-path = "which strata-engine"
+
+# 编译 + 安装（引擎/终端安装到 $CONDA_PREFIX，RPATH 相对定位 lib）
+# 后端由 $STRATA_BACKEND 自动区分（各 backend feature 单独定义）
+[feature.strata-base.tasks.strata-build]
+depends-on = ["strata-src"]
+cmd = "bash $PIXI_PROJECT_ROOT/scripts/strata-build.sh"
+
+# 验证安装：bin 存在 + --version + 运行时能检测到对应后端 GPU
+[feature.strata-base.tasks.strata-verify]
+cmd = "bash $PIXI_PROJECT_ROOT/scripts/strata-verify.sh"
+
+
+# ============================================================
+# Feature: Strata (CUDA, 源码编译)
+#
+# CUDA 依赖链与 llamacpp-cuda 相同（find_package(CUDAToolkit) 需要
+# cudart + cublas；引擎同时静态链接 ggml-cpu，CPU 回退可用）。
+# 内核要求 sm_75+（tf32 mma / bf16），RTX 50 (sm_120) 需要 CUDA >= 13.0，
+# 与本平台声明的 13.2 匹配。
+#
+# Python 终端（strata serve / status / launch）随环境一起安装：
+# 引擎二进制是 generate 程序，OpenAI 兼容 API 服务由仓库内 Python
+# server（serve/）驱动，运行依赖与仓库 requirements.txt 的 pin 一致。
+# 可选：STRATA_BUILD_DSV41=1 pixi run -e strata-cuda strata-build
+# 另编 DeepSeek-V4.1 引擎（strata-dsv41，独立构建目录）。
+# ============================================================
+[feature.strata-cuda]
+platforms = ["linux-64-cu13"]
+
+[feature.strata-cuda.dependencies]
+# --- CUDA 编译栈（conda-forge 拆分包，pin 到 13.2 匹配平台声明）---
+cuda-version = "=13.2"
+# nvcc 编译器（$CONDA_PREFIX/bin/nvcc）
+cuda-nvcc = "*"
+# CUDA Runtime（strata_core / strata_mmq 链接 CUDA::cudart）
+cuda-cudart-dev = "*"
+# cuBLAS（strata_kernels 链接 CUDA::cublas；cublasLt 随 libcublas-dev 提供）
+libcublas-dev = "*"
+# --- Python 终端 ---
+python = "3.12.*"
+
+[feature.strata-cuda.activation.env]
+CUDACXX = "$CONDA_PREFIX/bin/nvcc"
+# 后端标识（共用任务 strata-build / strata-verify 据此区分）
+STRATA_BACKEND = "cuda"
+# Python 终端入口（strata.py / strata_cli / serve / data / tools），
+# strata-build 拷贝到此目录；bin/strata 启动器据此找到 strata.py
+PYTHONPATH = "$CONDA_PREFIX/strata"
+
+[feature.strata-cuda.pypi-dependencies]
+# API server 运行依赖（strata.py 的 preflight 检查这 7 个包），
+# pin 与仓库 requirements.txt 一致（python 3.12 分支）
+jinja2 = "==3.1.6"
+pyyaml = "==6.0.3"
+regex = "==2026.9.10"
+psutil = "==7.2.2"
+requests = "==2.34.2"
+numpy = "==2.5.3"
+pillow = "==12.3.0"
+tqdm = "==4.70.1"
+
 
 # ============================================================
 # Feature: vLLM (PyPI, CUDA 13 后端)
@@ -404,5 +509,6 @@ llamacpp-cuda = { features = ["llama-base", "llamacpp-cuda"], solve-group = "lla
 llamacpp-vulkan = { features = ["llama-base", "llamacpp-vulkan"], solve-group = "llamacpp-vulkan" }
 sdcpp-vulkan = { features = ["sdcpp-base", "sdcpp-vulkan"], solve-group = "sdcpp-vulkan" }
 sdcpp-cuda = { features = ["sdcpp-base", "sdcpp-cuda"], solve-group = "sdcpp-cuda" }
+strata-cuda = { features = ["strata-base", "strata-cuda"], solve-group = "strata-cuda" }
 vllm-cuda = { features = ["vllm-cuda"], solve-group = "vllm-cuda" }
 sglang-cuda = { features = ["sglang-cuda"], solve-group = "sglang-cuda" }

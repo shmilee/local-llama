@@ -1,6 +1,6 @@
 # pixi 环境
 
-`pixi.toml` 管理四个推理环境（llama.cpp / vLLM / SGLang / stable-diffusion.cpp），
+`pixi.toml` 管理七个推理环境（llama.cpp / vLLM / SGLang / stable-diffusion.cpp / Strata），
 全部源码或 PyPI 安装，系统依赖最小化（CUDA 环境仅依赖 NVIDIA 驱动）。
 
 ## 环境一览
@@ -13,6 +13,7 @@
 | `sglang-cuda`    | `sglang-cuda`                    | CUDA 13| PyPI（SGLang + torch cu130） |
 | `sdcpp-vulkan`   | `sdcpp-base` + `sdcpp-vulkan`    | Vulkan | conda 工具链 + sd.cpp 源码编译 |
 | `sdcpp-cuda`     | `sdcpp-base` + `sdcpp-cuda`      | CUDA   | conda 工具链 + sd.cpp 源码编译 |
+| `strata-cuda`    | `strata-base` + `strata-cuda`    | CUDA 13| conda 工具链 + Strata 源码编译（CUDA 引擎 + Python 终端） |
 
 ## 常用命令
 
@@ -43,6 +44,12 @@ pixi install -e sdcpp-cuda      # 需 N 卡（PRO6000 等）
 pixi run   -e sdcpp-cuda   sdcpp-build
 pixi run   -e sdcpp-cuda   sdcpp-verify
 pixi run   -e sdcpp-cuda   sdcpp-path
+
+# Strata（CUDA 引擎 + Python 终端；需 N 卡 sm_75+，RTX 50 需 CUDA>=13）
+pixi install -e strata-cuda
+pixi run   -e strata-cuda strata-build    # 下载源码 + 编译引擎 + 安装终端
+pixi run   -e strata-cuda strata-verify   # --version + GPU 检测/显存自检 + python 依赖
+pixi run   -e strata-cuda strata-path
 ```
 
 verify 脚本缺 CUDA 布局时会自动调用 prepare。
@@ -67,6 +74,87 @@ verify 脚本缺 CUDA 布局时会自动调用 prepare。
     系统库目录；stub 仅链接时使用，运行时按 SONAME 找真实驱动）
 * `sglang-cuda-prepare` 额外把布局里的 `nvcc` 换成 wrapper 脚本
   （注入 `-DCCCL_DISABLE_CTK_COMPATIBILITY_CHECK`，原因见 `docs/sglang.md`）。
+
+## Strata 环境策略（strata-cuda）
+
+Strata 是 Qwen3.8-Flash-Next / Qwen3.6 / DeepSeek 形状 MoE 模型专用的
+CUDA 推理引擎（ggml 已 vendored 在 `third_party/strata-ggml`，无外部
+llama.cpp 依赖）。两个模型的引擎直跑说明与注意点见 **`docs/strata.md`**。
+环境装两样东西：
+
+* **引擎**（C++/CUDA 源码编译，安装到 `$CONDA_PREFIX/bin`）：
+  - `strata-engine` —— 引擎本体（官方二进制名 `strata`，改名是为了把
+    `strata` 留给 Python 终端启动器；server 通过 run config 的绝对
+    路径调引擎，改名无副作用）
+  - `libstrata_kq.so` —— K-quant MMQ prompt kernels 独立 DSO，引擎从
+    **自己所在目录** dlopen 它，故必须与 `strata-engine` 同目录
+  - `strata-device` —— GPU 诊断/显存自检（verify 用它，等价
+    llama.cpp 的 `--list-devices` + 一次真实 64 MiB 显存往返）
+  - 仓库无 CMake install 规则：`strata-build.sh` 手动拷贝后用
+    `patchelf` 把 RPATH 设为 `$ORIGIN/../lib`（环境内 CUDA 运行库）
+  - CUDA 架构默认 `native`（本机 GPU）；跨卡发行设
+    `STRATA_CUDA_ARCHS="75;86;89;120"`（对齐官方发布构建
+    `packaging/build_cuda_linux.sh` VARIANT=cuda13）
+  - 默认模型形状 `STRATA_GEOMETRY=flash_next`；其他形状经
+    `STRATA_CMAKE_EXTRA` 传 `-DSTRATA_GEOMETRY=<name>` /
+    `-DSTRATA_BUILD_DSV41=ON` 等
+* **Python 终端**（`strata` 命令，OpenAI/Anthropic 兼容 API server、
+  status/monitor 等）：整套 python 树拷入 `$CONDA_PREFIX/strata/`
+  （strata.py / strata_cli / strata_control / serve / data / tools /
+  setup.py），`$CONDA_PREFIX/bin/strata` 是 3 行 sh 启动器（环境
+  python3 + 自设 PYTHONPATH，未 `pixi activate` 直接调用也能跑）。
+  运行依赖 pin 与仓库 `requirements.txt` 一致（python 3.12 分支）。
+
+源码下载：tag tarball（`download/Strata-<版本>.tar.gz`，含 vendored
+ggml）；直连 codeload 失败时回退 `gh-proxy.com` 镜像
+（`scripts/strata-src.sh`）。
+
+验证不加载模型、不启动服务（与其他环境同策略）：引擎的
+`--version`/`--geometry` + `strata-device --list-devices`（架构不匹配
+会报 `cannot run`，据此抓"编译成功但后端没编进去"的静默失败）+
+`--selftest`（真实占用显存）+ python 终端 import 检查。
+
+DeepSeek-V4.1-Flash 引擎（`strata-dsv41`）：
+
+* 构建：`STRATA_BUILD_DSV41=1 pixi run -e strata-cuda strata-build`
+  （独立构建目录 `build-cuda-dsv41`；dsv41 会改 ggml-cpu 的 BMI2 等
+  缓存级选项，与主引擎不能共用 build 目录）
+* 推理冒烟（6 卡空闲实测，ISTA-DAS IQ2_XXS 2.00bpw 233GB，
+  `tools/dsv41/smoke.py` 官方脚本；模型只读自
+  `/data/huggingface-downloads/DeepSeek-V4.1-Flash`）：
+  1. 生成 pack（几 MB 索引，权重运行时读 GGUF）：
+     `python tools/dsv41/pack_gguf.py --model <folder> \
+        --shards <绝对路径 00001..00005> --engram <绝对路径 Engram.gguf> \
+        --engram-meta <绝对路径 00001 分片（六分片布局自带 ple.* 参数）> \
+        --out <pack_dir>`
+     （`--engram`/`--engram-meta` 必须绝对路径：按 CWD 解析找不到会
+     静默报 "5 of the 6 shards are here"）
+  2. `python tools/dsv41/smoke.py --exe <build-dir>/strata-dsv41 \
+     --pack <pack_dir> --gpus 0,1,3,4,5,7`
+     → "The capital of France is Paris."，通过有效性检查。
+     无 DSpark drafter 时 `--dspark auto` 自动不启用（n_mtp=0）。
+     冷缓存加载约 15 分钟（250MB/s 磁盘读 233GB）。
+
+Qwen3.8-Flash-Next 推理冒烟（PRO6000 单卡实测，GSQ-RCO IQ3_XXS 71GB，
+空闲卡 `--gpu N`；模型只读自 `/data/huggingface-downloads`）：
+
+1. 准备 pack（约 1 分钟，输出 1.5G；专家权重运行时直接读 GGUF，
+   不复制 `experts.bin`）：
+   `python tools/iq_pack.py --gguf <shard1> --out <pack_dir>`
+   （需 llama.cpp 的 gguf-py，`STRATA_GGUF_PY` 指向；commit pin 见
+   setup.py `LLAMA_CPP_COMMIT`）
+2. 引擎直跑（IQ/native pack **必须**带 `--native <shard1> --spec T
+   --prefill auto`；`--ple-gguf` 给含 `per_layer_token_embd.weight`
+   的分片；`--expert-profile` 给环境自带
+   `$CONDA_PREFIX/strata/data/expert-profile.bin`，缺了 decode 会拒启）：
+   ```
+   strata-engine --pack <pack_dir> --native <shard1> --ple-gguf <shard2> \
+       --spec 2 --prefill auto --expert-profile $CONDA_PREFIX/strata/data/expert-profile.bin \
+       --tokens "<逗号分隔 token id>" --gpu N --max-new 64 --max-context 4096 --greedy
+   ```
+3. 结果：prefill 17 tok/s（TTFT 2.2s），**decode 134.9 tok/s**，
+   正常 EOS 退出。启动需 ~115GB 主机内存（PLE 26.8GiB mlock +
+   40GiB 专家 arena 首用时从 SSD 流式读入）；冷缓存首跑约 10 分钟。
 
 ## 国内 PyPI / torch 镜像
 
