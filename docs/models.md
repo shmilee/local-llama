@@ -48,7 +48,16 @@
      + 75.8G, `IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-0000{1,2}-of-00002.gguf`
      + `mmproj-Qwen3.8-Flash-Next-BF16.gguf`
 
-3. MoE, Qwen3.6, Alibaba Cloud, Text + Image + Video
+3. MoE, DeepSeek-V4.1-Flash-1017, Text + Image
+   - <https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF>
+     + 138G, `DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-0000{1,2,3,4,5}-of-00006.gguf`
+     + 111G, `DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf`
+     + `mmproj-DeepSeek-V4.1-Flash-1017-BF16.gguf`
+   - <https://huggingface.co/unsloth/DeepSeek-V4.1-Flash-1017-GGUF>
+     + 只下载草稿 `dspark-DeepSeek-V4.1-Flash-1017-Q8_0.gguf`
+
+
+11. MoE, Qwen3.6, Alibaba Cloud, Text + Image + Video
    - 基础工作, 速度优势
    - <https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF> 或 <https://modelscope.cn/models/unsloth/Qwen3.6-35B-A3B-MTP-GGUF>
      + `Qwen3.6-35B-A3B-UD-Q8_K_XL.gguf`, `mmproj-BF16.gguf`
@@ -64,7 +73,7 @@
      + `Huihui-Qwen3.6-35B-A3B-Claude-4.7-Opus-abliterated.i1-IQ3_XS.gguf`
      + `Huihui-Qwen3.6-35B-A3B-Claude-4.7-Opus-abliterated.i1-IQ4_XS.gguf`
 
-4. MoE, Gemma4, Google DeepMind, Text + Image
+12. MoE, Gemma4, Google DeepMind, Text + Image
    - 听/视觉, 写作和语气
    - <https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF>
      + `gemma-4-26B-A4B-it-UD-Q4_K_XL.gguf`, `mmproj-BF16.gguf`
@@ -74,7 +83,7 @@
      + `gemma-4-26B-A4B-it-ultra-uncensored-heretic.i1-IQ3_XS.gguf`
      + `gemma-4-26B-A4B-it-ultra-uncensored-heretic.i1-IQ4_XS.gguf`
 
-5. Toy, 小模型
+13. Toy, 小模型
    - Llama3.2, Text
      + <https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF>: `Llama-3.2-3B-Instruct-Q4_K_M.gguf`, `Llama-3.2-3B-Instruct-IQ4_NL.gguf`, `Llama-3.2-3B-Instruct-IQ4_XS.gguf`
      + <https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF>: `Llama-3.2-3B-Instruct-uncensored-Q4_K_M.gguf`
@@ -95,13 +104,13 @@
        `Qwen3.5-4B-Claude-4.6-OS-Auto-Variable-HERETIC-UNCENSORED-THINKING.mmproj-Q8_0.gguf`。
        来源 DavidAU，修复 Jinja template issues with repeats, long thinking, loops 以及 tool handling。
 
-6. Embedding model, 嵌入模型, RAG
+15. Embedding model, 嵌入模型, RAG
    - Qwen3, VL, <https://huggingface.co/batiai/Qwen3-VL-Embedding-2B-GGUF>
    - `Qwen3-VL-Embedding-2B-Q8_0.gguf`
    - Gemma, <https://huggingface.co/ggml-org/embeddinggemma-300M-GGUF>
    - `embeddinggemma-300M-Q8_0.gguf`
 
-7. Z-Image, 文生图
+22. Z-Image, 文生图
    - <https://huggingface.co/unsloth/Z-Image-Turbo-GGUF>, `z-image-turbo-Q4_K_M.gguf`
    - <https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF>, `Qwen3-4B-Instruct-2507-Q4_K_M.gguf`
    - <https://huggingface.co/black-forest-labs/FLUX.1-schnell>, `ae.safetensors`
@@ -149,14 +158,22 @@ hf download --local-dir ./Qwen3.8-Flash-Next unsloth/Qwen3.8-Flash-Next-GGUF \
     UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00003-of-00003.gguf \
     MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf \
     mmproj-F16.gguf
+hf download --local-dir ./Qwen3.8-Flash-Next ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF \
+    IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-0000{1,2}-of-00002.gguf \
+    mmproj-Qwen3.8-Flash-Next-BF16.gguf
 
 # 服务器下载 Qwen3.8 Flash Next FP4
 hf download --local-dir ./Qwen3.8-Flash-Next-NVFP4 nvidia/Qwen3.8-Flash-Next-NVFP4
 
-# 服务器下载 Qwen3.6 MoE模型 Q8
-hf download --local-dir ./Qwen3.6-35B-A3B unsloth/Qwen3.6-35B-A3B-MTP-GGUF \
-    Qwen3.6-35B-A3B-UD-Q8_K_XL.gguf \
-    mmproj-BF16.gguf
+# 服务器下载 DeepSeek 1017
+hf download --local-dir ./DeepSeek-V4.1-Flash ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF \
+    DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-0000{1,2,3,4,5}-of-00006.gguf \
+    DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf \
+    mmproj-DeepSeek-V4.1-Flash-1017-BF16.gguf
+ln -sv DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf \
+    ./DeepSeek-V4.1-Flash/DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00006-of-00006.gguf
+hf download --local-dir ./DeepSeek-V4.1-Flash unsloth/DeepSeek-V4.1-Flash-1017-GGUF \
+    dspark-DeepSeek-V4.1-Flash-1017-Q8_0.gguf
 ```
 
 ```
