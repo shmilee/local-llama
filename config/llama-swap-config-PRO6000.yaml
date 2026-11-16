@@ -1029,7 +1029,9 @@ models:
   #   只读 ${models_dir}/DeepSeek-V4.1-Flash/；pack 在 strata-packs/dsv41-iq2xxs（仓库根）
   # - 引擎：strata-cuda 环境源码构建（v0.2.4.2，pin 原因见 docs/strata-prefill-regression.md）
   # - 512k 为实测档（docs/strata.md）：显存零压力（KV 0.27G/卡），fresh prefill
-  #   一次性 ~4.5min（2048 tok/s），decode ~147 tok/s
+  #   一次性 ~4.5min（2048 tok/s），decode ~147 tok/s；decode 依赖 Engram
+  #   热缓存（冷行仅 ~11-15 tok/s），重启后 cat Engram 表热化一次
+  #   （run config 已带 --ssd-cache 0 与 DS4_SPLIT=19,21）
   "DeepSeek-V4.1-Flash":
     cmd: |
       ${default-strata-ds41}
@@ -1053,22 +1055,25 @@ models:
       context: 524288
     sendLoadingState: true
 
-  # 14. Qwen3.8-Flash-Next —— strata flash_next 后端（单卡 3，1M 上下文）
+  # 14. Qwen3.8-Flash-Next —— strata flash_next 后端（单卡 6，1M 上下文，支持图片）
   # - 模型：ISTA-DAS IQ3_XXS（71G，2 分片）+ PLE 表（shard 2，26.8GiB mlock）；
   #   只读 ${models_dir}/Qwen3.8-Flash-Next/IQ3_XXS/，pack 在
   #   strata-packs/qwen38fn-iq3xxs（仓库根）
+  # - 图片：run config 的 vision 段（strata-vision 编码器 + BF16 mmproj，
+  #   编码器随引擎卡，--vram-reserve-mib 700）；768×512 → 461 image+text
+  #   tokens，实测 prompt 883 tok/s、decode 155 tok/s（docs/strata.md）
   # - 与现有 "Qwen3.8-Flash-Next"（llama.cpp UD-IQ4_XS，GPU 6，256k）是不同
   #   后端/量化/卡位，可并存切换
   # - 实测（docs/strata.md）：1M prefill 4349 tok/s（~4min）、decode @1M
-  #   161.5 tok/s、显存 72G/96G；RAM 驻留 ~115G（PLE mlock + 专家 arena）
+  #   161.5 tok/s、显存 72G/96G；RAM 驻留 ~74G（PLE mlock + 专家 arena）
   "Qwen3.8-Flash-Next-Strata":
     cmd: |
       ${default-strata-qwen}
       --port ${PORT}
-    description: "MoE (ISTA-DAS IQ3_XXS, 71GB) via Strata flash_next engine, 1x PRO6000 (GPU 3), 1M ctx"
+    description: "MoE (ISTA-DAS IQ3_XXS, 71GB) via Strata flash_next engine, 1x PRO6000 (GPU 6), 1M ctx, images"
     metadata:
       port: ${PORT}
-      note: "strata-engine GPU 3, context=1048576, PLE mlocked in RAM"
+      note: "strata-engine GPU 6, context=1048576, PLE mlocked in RAM, vision on"
     ttl: 36000
     timeouts:
       connect: 30
@@ -1077,7 +1082,7 @@ models:
       tlsHandshake: 10
       idleConn: 90
     capabilities:
-      in: [text]
+      in: [text, image]
       out: [text]
       tools: false
       reranker: false

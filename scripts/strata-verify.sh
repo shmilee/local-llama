@@ -15,15 +15,17 @@ BIN="$CONDA_PREFIX/bin"
 echo "bin dir: $BIN"
 test -d "$BIN" || { echo "FATAL: $BIN not a directory"; exit 1; }
 
-# strata-engine 是引擎本体（官方名 strata，改名避免与 Python 终端启动器冲突），
-# strata-device 是 GPU 诊断/自检程序，libstrata_kq.so 引擎从同目录 dlopen
-for b in strata-engine strata-device strata libstrata_kq.so; do
+# strata-engine 是主引擎本体（官方名 strata，改名避免与 Python 终端启动器
+# 冲突）；strata-dsv41 是 DeepSeek-V4.1 引擎；strata-vision 是图片编码器
+# （QFN 多模态必需）；strata-device 是 GPU 诊断/自检程序；libstrata_kq.so
+# 引擎从同目录 dlopen。三者都是 strata-build 的默认产物，缺一即安装不完整
+for b in strata-engine strata-dsv41 strata-vision strata-device strata libstrata_kq.so; do
     test -e "$BIN/$b" || { echo "FATAL: $BIN/$b missing"; exit 1; }
 done
-echo "binaries present: strata-engine, strata-device, strata (terminal), libstrata_kq.so"
+echo "binaries present: strata-engine, strata-dsv41, strata-vision, strata-device, strata (terminal), libstrata_kq.so"
 
 # 动态库全部可解析（RPATH 指向环境 lib）
-for b in strata-engine strata-device; do
+for b in strata-engine strata-dsv41 strata-vision strata-device; do
     echo
     echo "== ldd $b =="
     if ldd "$BIN/$b" | grep -q "not found"; then
@@ -34,12 +36,19 @@ for b in strata-engine strata-device; do
     echo "all shared libraries resolved"
 done
 
-# DeepSeek 引擎（可选安装，STRATA_BUILD_DSV41=1）
-if [ -x "$BIN/strata-dsv41" ]; then
-    echo
-    echo "== strata-dsv41 --version =="
-    "$BIN/strata-dsv41" --version
-fi
+echo
+echo "== strata-dsv41 --version =="
+"$BIN/strata-dsv41" --version
+
+# 图片编码器没有 --version：无参数时打印 usage（非零退出）
+echo
+echo "== strata-vision usage =="
+VISION_USAGE="$("$BIN/strata-vision" 2>&1 | head -1 || true)"
+echo "$VISION_USAGE"
+case "$VISION_USAGE" in
+    usage:*) ;;
+    *) echo "FATAL: strata-vision 未打印 usage（安装损坏？）"; exit 1 ;;
+esac
 
 echo
 echo "== strata-engine --version =="

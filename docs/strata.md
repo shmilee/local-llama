@@ -6,7 +6,8 @@ Strata 章节）。Strata 按模型形状分引擎：
 | 模型 | 引擎二进制 | 构建 |
 | ---- | --------- | ---- |
 | Qwen3.8-Flash-Next（`flash_next` 形状，默认） | `strata-engine` | 默认 `strata-build` |
-| DeepSeek-V4.1-Flash-1017 | `strata-dsv41` | `STRATA_BUILD_DSV41=1 strata-build`（独立构建目录） |
+| DeepSeek-V4.1-Flash-1017 | `strata-dsv41` | 默认 `strata-build`（独立构建目录） |
+| QFN 图片编码器（多模态） | `strata-vision` | 默认 `strata-build`（tools/vision） |
 
 两者都是 **token 级引擎**：命令行吃 token id（`--tokens` / `--ids`），不吃
 文本 prompt；聊天模板、OpenAI 兼容 API 在 Python 终端（`strata serve` 等）
@@ -14,9 +15,9 @@ Strata 章节）。Strata 按模型形状分引擎：
 
 ```
 pixi install -e strata-cuda
-pixi run -e strata-cuda strata-build                 # 约 10 分钟
-pixi run -e strata-cuda strata-verify
-STRATA_BUILD_DSV41=1 pixi run -e strata-cuda strata-build   # 需要 DeepSeek 引擎时
+pixi run -e strata-cuda strata-build   # 默认构建 engine + dsv41 + vision
+                                       # （首次约 30 分钟，增量重跑很快）
+pixi run -e strata-cuda strata-verify  # 校验三个二进制 + GPU
 ```
 
 本机模型（只读使用）：`/data/huggingface-downloads/`。跑之前用
@@ -259,10 +260,137 @@ DS4_SPLIT=19,21 strata-dsv41 --pack <pack_dir> --ids @<ids文件> --n 300 \
   DFlash2 投机解码在 server 下自动生效。
 * DS4.1 512k 实测（GPU 4,6）：prefill 2048 tok/s（~4.5min）、
   decode 147 tok/s；1M 整窗超线性退化（257 tok/s）故定 512k。
+* **DS4.1 prefill 随 prompt 长度的实测曲线**（生产实例，引擎 0.1.49.2
+  build 5794599e1，Engram 热，2026-11-14）：41 tok **199 t/s**（~0.2s）、
+  470 tok **744 t/s**、2,230 tok **1,170 t/s**、20,030 tok **1,794 t/s**、
+  132,030 tok **2,169 t/s**。llama-swap 表格里短 prompt 的 "Prefill" 只有
+  几百是每请求固定开销（~0.2s + 分块爬坡），不是退化；文档的 2048/2220
+  是 131k/512k 长 prompt 的数字。**Engram 冷时短 prompt 再减半**
+  （396 tok 373.9 t/s → 热后 ~740 t/s），所以热化是前提。
+* **DS4.1 的 decode 速度取决于 Engram 热缓存**（最常踩的坑）：专家全在
+  显存（2 卡 15744/15744），但每个 token 会随机读 Engram 表（110GB，在
+  /data HDD 上）。冷行 ~140ms/token → decode 只有 **~11-15 tok/s**；整表
+  进 page cache 后才有 ~147 tok/s。机器重启/大内存压力后热化一次
+  （~8min，250MB/s）：
+  `cat ${models_dir}/DeepSeek-V4.1-Flash/DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf > /dev/null`
+  llama-swap 换模或 ttl 卸载模型**不会**丢 page cache，只有重启机器才会。
+  run config 已配 `--ssd-cache 0`（引擎默认的 RAM store 白占内存、会挤掉
+  Engram 页；专家全进显存时它 0 hits）和 `"env": {"DS4_SPLIT": "19,21"}`
+  （均衡层分；auto 的 13/27 偏斜在 512k 长窗/长输出下更差，且引擎忽略
+  `--layer-split` 参数，只认 DS4_SPLIT 环境变量）。
 * llama-swap 子进程 PATH 无 pixi 时 cmd 要用 `~/.pixi/bin/pixi`
   绝对路径（生产 start 脚本环境有则可用裸 `pixi`）。
 * 测试记录：独立 llama-swap 实例（:18435，独立 sqlite）验证两模型
   chat 全链路通过（2026-11-13）。
+
+## QFN 补充实测（2026-11-14）
+
+prefill 随 prompt 长度（生产实例，单卡 96G，`--ple-io ram`，全部专家驻留
+显存）：
+
+| prompt tokens | prefill | 说明 |
+| --- | --- | --- |
+| 60 | 229 tok/s | 固定开销 ~0.4s/请求主导 |
+| 16,521 | 4,412 tok/s | 首个冷请求 3,085 |
+| 131,811 | 5,540 tok/s | 其中 16,384 命中前缀 |
+
+* llama-swap 统计里 143–768 tok/s 的 prefill 都是 63–793 token 的短 prompt
+  （拟合 ≈ 0.4s + 0.8ms/token，渐近 ~1250 tok/s），不是退化；长 prompt
+  5k 级与早前 1M 实测 4349 tok/s 一致。
+* **内存构成**（引擎 RSS ~74GB）：PLE 表 26.8GB（`--ple-io ram` mlock，
+  必需——HDD 上 direct 只有 3MB/s）+ 专家 arena 40GB（24576 专家已全部
+  驻留显存，arena 只是填充/借用的主机侧副本，默认 **pinned**）+ 页缓存。
+* `--ssd-cache` 是 dsv41 引擎专有参数，QFN（strata-engine）没有、也不需要。
+* 想省掉那 40GB pinned 副本：`--mmap-experts`（改 mmap 模型文件，页变
+  可回收的 page cache；`ps` 的 RSS 数字不变 ~73GB，但只有 28GB 是 locked，
+  其余是 RssFile，可回收）。代价：16k prefill 4,412 → 3,523/3,717 tok/s
+  （-15%），decode 不变（145.8 vs 146.2）。再加 `--resident-cpu-experts`
+  多 ~3.5GB 常驻，prefill 无改善。**默认（快）推荐**；内存紧张时用
+  `--mmap-experts`。
+
+## KV cache 量化（QFN 可调，DS4.1 不适用）
+
+`strata-engine`（QFN）支持 `--kv fp16|int8|q4_0|k8v4`；`strata-dsv41`
+（0.1.49.2）**没有 `--kv` 参数**——它的 KV 是压缩注意力（4 个
+kv_source_layer + compress_ratios），512k 时仅 0.19-0.29GB/卡，没有
+量化的必要（在它的 run config 里加 `kv` 键也不会传给引擎）。
+
+实测（2026-11-15，QFN 单卡 96G，1M 上下文，GPU 3）：
+
+| `--kv` | 显存 | 32k prefill | 32k decode* | 32k 事实检索 |
+| --- | --- | --- | --- | --- |
+| fp16（默认） | 72.4G | 5,236 tok/s | 143-178 t/s | ✅ "4815" |
+| int8 | 60.5G | 6,199 tok/s | 132-169 t/s | ✅ "4815" |
+
+\* decode 受 DSpark 草稿命中率影响大（同一 prompt 两次运行差 ±20%），
+只能看趋势；int8 的 KV 读带宽减半，prefill 稳定 **+18%**，decode 在噪声内。
+1M 上下文的 KV 在 fp16 下约 23.8G，int8 省 11.9G。
+
+**质量**（Strata 自带 teacher-forced 基准 `bench/results/2026-09-27-kv-q4`，
+fp16 为基准）：**int8 与 fp16 基本无法区分**（top-1 一致 92-98%、KL
+0.009-0.114、困惑度在噪声内）；**q4_0 有可测损失**（top-1 88-96%、KL
+0.028-0.297、文档困惑度 +8% @1K、+12% @8K，且随上下文变差）。社区量测
+同向：q8/int8 近似无损；4-bit 里**K cache** 是敏感的一半（V 可以压到
+4-bit），llama.cpp PR #7412 与多份 KV 量测帖都显示 q4_0 的 K 在长上下文
+下明显掉分；还有预印本指出低比特 KV 会让困惑度看着正常但安全对齐/行为
+退化。注意两个模型权重已量化到 IQ2_XXS / IQ3_XXS，KV 再压 4-bit 的损失
+会叠加。
+
+**结论（hhf200：8×96G + 251G RAM）**：显存不是瓶颈 → 两个模型都用默认
+**fp16**。QFN 1M 时 fp16 占 72.4G、余 23.5G，int8 省下的 12G 没有用途
+（24576 专家已全驻留 VRAM）。只有这些场景才用 `--kv int8`：想一张卡跑
+两个模型、想开更大上下文、或用 `--kv-grow` 把显存让给专家缓存——质量
+安全、prefill 更快、decode 不退化。**`q4_0` 不建议**用于推理/长文场景
+（要省就用 `k8v4`：int8 K + q4_0 V，816B/cell，社区数据显示 K8V4 安全）。
+
+## 图像（视觉）
+
+两个模型的图片支持差异很大：
+
+### QFN（strata-engine）—— **已启用**（2026-11-15，生产 config）
+
+* 需单独编译图片编码器（llama.cpp mtmd，`tools/vision`）：
+  `cmake -S tools/vision -B build-vision -DLLAMA_DIR=<llama.cpp checkout>
+  -DSTRATA_VISION_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=120 -DSTRATA_PORTABLE=OFF`，
+  产物装到 `$CONDA_PREFIX/bin/strata-vision`。**`strata-build` 已默认
+  构建并安装它**（见文首），重建环境时跑一次 `strata-build` 即可。
+* `config/strata-qwen.json` 已含 vision 段（相对路径按 cwd 解析），args
+  里显式加 `--vision --vram-reserve-mib 700`（编码器与引擎同卡，预留
+  700MiB，编码器实际占 ~1.7GB）：
+  ```json
+  "vision": {"exe": ".pixi/envs/strata-cuda/bin/strata-vision",
+             "mmproj": "/data/huggingface-downloads/Qwen3.8-Flash-Next/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
+             "model": "<IQ3_XXS shard 1>", "gpu": true, "max_tokens": 1024}
+  ```
+  `model` 只用于读 vocab。用 pinned 的 BF16 mmproj（907,543,008 B；目录里
+  的 `mmproj-F16.gguf` 904,004,000 B 不是 pinned 版本）。可选用
+  `"cuda_device": N` 把编码器钉到别的卡（省引擎卡的 ~1.7GB，但那张卡
+  被占满时模型会起不来，故生产默认同卡）。
+* 实测（2026-11-15 生产实例，GPU 6）：768×512 PNG → 461 image+text
+  tokens；编码器 warm-up 0.3s（1024 image tokens）、prompt **883 tok/s**、
+  decode **154.7 tok/s**；答案正确（读出 "7391" 与左右布局）。llama-swap
+  条目 `capabilities.in` 已加 `image`。
+
+### DS4.1（dsv41）—— 0.1.49.2 不支持，需 v0.2.13 / 引擎 0.1.59
+
+* `docs/DEEPSEEK41.md`（v0.2.4.2）："Not in this version: … pictures
+  (`--vision` is ignored with a warning)"。mmproj + `strata-vision` 的路
+  也走不通：llama.cpp 3cf03257 不认识 `deepseek41` 架构（b12282 认识，但
+  用 b12282 的编码器会因该模型的 tiled 预处理得到非矩形 token 网格，
+  `strata-vision` 拒绝——引擎 GENI 只接受单矩形网格）。
+* v0.2.13（0.1.59）**内置视觉塔**（不需要 strata-vision/mmproj 段）：
+  - pack 必须用 0.2.13 的 `pack_gguf.py --mmproj <mmproj.gguf>` 重建；
+    pack 里会有 `vision.*` 与 `image_token_id`（本模型 129264，32 层，
+    patch 14，max 1024 image tokens）。
+  - 服务端需要 Pillow，自动把图缩到「边长 42 的倍数、≤1024 image tokens」。
+  - 实测：768×512 → 284 prompt tokens，视觉塔读图 241ms（缓存后 0ms），
+    答案正确；0.1.59 速度：prefill 70.9 tok/s（284 tok 4.0s）、decode
+    81 t/s（Engram 热）。
+* **决定（2026-11-14）：以性能为先，DS4.1 图片暂缓。** 保持 v0.2.4.2
+  （0.1.49.2，长上下文 prefill 2.2k tok/s）；等上游修复 0.1.59 的 10×
+  prefill 回退（见 `docs/strata-prefill-regression.md`、#5894）且新版
+  仍带内置视觉塔时，再升级并测试图片。当前不做 v0.2.13 的并行条目
+  （装两份引擎、两套 pack 的维护成本不值）。
 
 ## 注意点汇总
 

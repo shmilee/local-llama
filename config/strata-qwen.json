@@ -5,7 +5,7 @@
            "--ple-gguf", "/data/huggingface-downloads/Qwen3.8-Flash-Next/IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00002-of-00002.gguf",
            "--spec", "2", "--prefill", "auto", "--ple-io", "ram",
            "--expert-profile", ".pixi/envs/strata-cuda/strata/data/expert-profile.bin",
-           "--max-context", "1048576"],
+           "--max-context", "1048576", "--vision", "--vram-reserve-mib", "700"],
   "cwd": ".",
   "tokenizer": "strata-packs/qwen38fn-iq3xxs/tokenizer",
   "model_name": "qwen3.8-flash-next",
@@ -14,6 +14,13 @@
   "lib_dirs": [],
   "port": 0,
   "engine_ready_s": 3600,
-  "gpu": [4],
-  "gpus_asked": true
+  "gpu": [6],
+  "gpus_asked": true,
+  "vision": {
+    "exe": ".pixi/envs/strata-cuda/bin/strata-vision",
+    "mmproj": "/data/huggingface-downloads/Qwen3.8-Flash-Next/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
+    "model": "/data/huggingface-downloads/Qwen3.8-Flash-Next/IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00001-of-00002.gguf",
+    "gpu": true,
+    "max_tokens": 1024
+  }
 }

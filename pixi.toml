@@ -325,8 +325,10 @@ cmd = "bash $PIXI_PROJECT_ROOT/scripts/strata-verify.sh"
 # Python 终端（strata serve / status / launch）随环境一起安装：
 # 引擎二进制是 generate 程序，OpenAI 兼容 API 服务由仓库内 Python
 # server（serve/）驱动，运行依赖与仓库 requirements.txt 的 pin 一致。
-# 可选：STRATA_BUILD_DSV41=1 pixi run -e strata-cuda strata-build
-# 另编 DeepSeek-V4.1 引擎（strata-dsv41，独立构建目录）。
+# strata-build 默认构建三个产物：主引擎 strata-engine、DeepSeek-V4.1
+# 引擎 strata-dsv41（独立构建目录）、图片编码器 strata-vision
+# （tools/vision 独立 CMake 工程，QFN 多模态必需——缺它带 vision 段的
+# run config 起不来）。
 # ============================================================
 [feature.strata-cuda]
 platforms = ["linux-64-cu13"]

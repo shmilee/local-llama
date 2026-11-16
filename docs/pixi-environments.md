@@ -96,8 +96,8 @@ llama.cpp 依赖）。两个模型的引擎直跑说明与注意点见 **`docs/s
     `STRATA_CUDA_ARCHS="75;86;89;120"`（对齐官方发布构建
     `packaging/build_cuda_linux.sh` VARIANT=cuda13）
   - 默认模型形状 `STRATA_GEOMETRY=flash_next`；其他形状经
-    `STRATA_CMAKE_EXTRA` 传 `-DSTRATA_GEOMETRY=<name>` /
-    `-DSTRATA_BUILD_DSV41=ON` 等
+    `STRATA_CMAKE_EXTRA` 传 `-DSTRATA_GEOMETRY=<name>`（dsv41 引擎由
+    脚本固定加 `-DSTRATA_BUILD_DSV41=ON`，无需手动）
 * **Python 终端**（`strata` 命令，OpenAI/Anthropic 兼容 API server、
   status/monitor 等）：整套 python 树拷入 `$CONDA_PREFIX/strata/`
   （strata.py / strata_cli / strata_control / serve / data / tools /
@@ -114,11 +114,16 @@ ggml）；直连 codeload 失败时回退 `gh-proxy.com` 镜像
 会报 `cannot run`，据此抓"编译成功但后端没编进去"的静默失败）+
 `--selftest`（真实占用显存）+ python 终端 import 检查。
 
-DeepSeek-V4.1-Flash 引擎（`strata-dsv41`）：
+DeepSeek-V4.1-Flash 引擎（`strata-dsv41`）与图片编码器（`strata-vision`）
+都是 `strata-build` 的默认产物：
 
-* 构建：`STRATA_BUILD_DSV41=1 pixi run -e strata-cuda strata-build`
-  （独立构建目录 `build-cuda-dsv41`；dsv41 会改 ggml-cpu 的 BMI2 等
-  缓存级选项，与主引擎不能共用 build 目录）
+* 构建：`pixi run -e strata-cuda strata-build`
+  - `strata-dsv41` 用独立构建目录 `build-cuda-dsv41`（dsv41 会改
+    ggml-cpu 的 BMI2 等缓存级选项，与主引擎不能共用 build 目录）
+  - `strata-vision` 是 `tools/vision` 独立 CMake 工程（llama.cpp mtmd，
+    CUDA 后端，构建目录 `build-vision`）；QFN 的 run config 有 vision 段
+    而缺它时模型起不来，故不是可选项
+  - `strata-verify` 会检查这两个二进制，缺失即失败
 * 推理冒烟（6 卡空闲实测，ISTA-DAS IQ2_XXS 2.00bpw 233GB，
   `tools/dsv41/smoke.py` 官方脚本；模型只读自
   `/data/huggingface-downloads/DeepSeek-V4.1-Flash`）：

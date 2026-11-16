@@ -6,11 +6,19 @@
 #   PIXI_PROJECT_ROOT, STRATA_VERSION, STRATA_BACKEND,
 #   CONDA_PREFIX, CMAKE_PREFIX_PATH, CUDACXX（仅 cuda）
 # 可选环境变量:
-#   STRATA_BUILD_DIR    构建目录（相对源码目录，默认 build-$BACKEND）
+#   STRATA_BUILD_DIR    主引擎构建目录（相对源码目录，默认 build-$BACKEND）
 #   STRATA_CUDA_ARCHS   CUDA 架构（默认 = 本机 GPU 探测出的架构号，如 120；
 #                       跨卡发行可设 "75;86;89;120"，见 packaging/build_cuda_linux.sh）
-#   STRATA_BUILD_DSV41  =1 时另编 DeepSeek-V4.1 引擎（独立构建目录，装 strata-dsv41）
 #   STRATA_CMAKE_EXTRA  追加 cmake 参数（如 -DSTRATA_GEOMETRY=<name>）
+#   STRATA_DSV41_BUILD_DIR / STRATA_VISION_BUILD_DIR  覆盖对应构建目录
+#   STRATA_VISION_LLAMA_DIR  覆盖 strata-vision 用的 llama.cpp 源码目录
+#
+# 默认一次构建三个必需产物（都装进 $CONDA_PREFIX/bin）：
+#   strata-engine   主引擎（flash_next 形状，Qwen3.8-Flash-Next 等）
+#   strata-dsv41    DeepSeek-V4.1 引擎（独立构建目录：BMI2 等缓存级选项
+#                   与主引擎冲突，共用会互相污染）
+#   strata-vision   图片编码器（tools/vision 独立 CMake 工程；QFN 多模态
+#                   必需——run config 有 vision 段而缺它时模型起不来）
 set -euo pipefail
 
 BACKEND="${STRATA_BACKEND:-}"
@@ -125,29 +133,54 @@ patchelf --set-rpath '$ORIGIN/../lib' "$BIN/strata-engine" "$BIN/strata-device"
 # 引擎从自己的目录 dlopen libstrata_kq.so（mmq_kq_loader.cpp），
 # 故它必须与 strata-engine 同目录（上面已装入 bin/）
 
-# --- 可选：DeepSeek-V4.1 引擎（STRATA_BUILD_DSV41=1）---
+# --- DeepSeek-V4.1 引擎（标配产物，独立构建目录）---
 # 独立构建目录：STRATA_BUILD_DSV41 会改 ggml-cpu 的 BMI2 等缓存级选项，
 # 与主引擎共用 build 目录会互相污染（官方 packaging/build_dsv41_cuda.sh 同理）
-if [ "${STRATA_BUILD_DSV41:-0}" = 1 ]; then
-    DSV_BUILD_DIR="${STRATA_DSV41_BUILD_DIR:-build-$BACKEND-dsv41}"
-    DSV_EXTRA=()
-    [ -n "${STRATA_CMAKE_EXTRA:-}" ] && read -r -a DSV_EXTRA <<< "$STRATA_CMAKE_EXTRA"
-    cmake -B "$DSV_BUILD_DIR" \
+DSV_BUILD_DIR="${STRATA_DSV41_BUILD_DIR:-build-$BACKEND-dsv41}"
+DSV_EXTRA=()
+[ -n "${STRATA_CMAKE_EXTRA:-}" ] && read -r -a DSV_EXTRA <<< "$STRATA_CMAKE_EXTRA"
+cmake -B "$DSV_BUILD_DIR" \
+    -G Ninja \
+    -S . \
+    -DCMAKE_BUILD_TYPE=Release \
+    "${COMPILER_ARGS[@]}" \
+    -DSTRATA_ENABLE_CUDA=ON \
+    -DSTRATA_BUILD_TESTS=OFF \
+    -DSTRATA_BUILD_DSV41=ON \
+    -DSTRATA_NATIVE_EXPERTS=ON \
+    -DCMAKE_CUDA_ARCHITECTURES="$ARCHS" \
+    "${FETCH_ARGS[@]}" \
+    "${DSV_EXTRA[@]}"
+cmake --build "$DSV_BUILD_DIR" --target strata-dsv41 -j
+install -m 755 "$DSV_BUILD_DIR/strata-dsv41" "$BIN/"
+patchelf --set-rpath '$ORIGIN/../lib' "$BIN/strata-dsv41"
+echo "installed strata-dsv41 to: $BIN"
+
+# --- 图片编码器 strata-vision（标配产物，QFN 多模态必需）---
+# tools/vision 是独立 CMake 工程（llama.cpp mtmd），与引擎同 llama.cpp pin /
+# 同 CUDA 架构；run config 有 vision 段而缺它时，终端 server 启动编码器失败，
+# 整个模型起不来
+if [ -d tools/vision ]; then
+    VISION_LLAMA_DIR="${STRATA_VISION_LLAMA_DIR:-${GG_DIR:-}}"
+    if [ -z "$VISION_LLAMA_DIR" ] && [ -d third_party/llama.cpp ]; then
+        VISION_LLAMA_DIR="$PWD/third_party/llama.cpp"
+    fi
+    test -n "$VISION_LLAMA_DIR" || { echo "FATAL: strata-vision 需要 llama.cpp 源码（设 STRATA_VISION_LLAMA_DIR）" >&2; exit 1; }
+    VISION_BUILD_DIR="${STRATA_VISION_BUILD_DIR:-build-vision}"
+    cmake -S tools/vision -B "$VISION_BUILD_DIR" \
         -G Ninja \
-        -S . \
         -DCMAKE_BUILD_TYPE=Release \
         "${COMPILER_ARGS[@]}" \
-        -DSTRATA_ENABLE_CUDA=ON \
-        -DSTRATA_BUILD_TESTS=OFF \
-        -DSTRATA_BUILD_DSV41=ON \
-        -DSTRATA_NATIVE_EXPERTS=ON \
+        -DLLAMA_DIR="$VISION_LLAMA_DIR" \
+        -DSTRATA_VISION_CUDA=ON \
         -DCMAKE_CUDA_ARCHITECTURES="$ARCHS" \
-        "${FETCH_ARGS[@]}" \
-        "${DSV_EXTRA[@]}"
-    cmake --build "$DSV_BUILD_DIR" --target strata-dsv41 -j
-    install -m 755 "$DSV_BUILD_DIR/strata-dsv41" "$BIN/"
-    patchelf --set-rpath '$ORIGIN/../lib' "$BIN/strata-dsv41"
-    echo "installed strata-dsv41 to: $BIN"
+        -DSTRATA_PORTABLE=OFF
+    cmake --build "$VISION_BUILD_DIR" --target strata-vision -j
+    install -m 755 "$VISION_BUILD_DIR/bin/strata-vision" "$BIN/strata-vision"
+    patchelf --set-rpath '$ORIGIN/../lib' "$BIN/strata-vision"
+    echo "installed strata-vision to: $BIN"
+else
+    echo "warning: 源码没有 tools/vision，跳过 strata-vision（该版本无图片功能？）" >&2
 fi
 
 # --- 安装 Python 终端到 $CONDA_PREFIX/strata ---

@@ -1,7 +1,8 @@
 {
   "exe": ".pixi/envs/strata-cuda/bin/strata-dsv41",
   "args": ["--pack", "strata-packs/dsv41-iq2xxs", "--max-context", "524288", "--eos", "1",
-           "--vision", "no", "--dspark", "auto", "--dspark-conf", "0.65"],
+           "--vision", "no", "--dspark", "auto", "--dspark-conf", "0.65", "--ssd-cache", "0"],
+  "env": {"DS4_SPLIT": "19,21"},
   "cwd": ".",
   "tokenizer": "strata-packs/dsv41-iq2xxs/tokenizer",
   "model_name": "deepseek-v4.1-flash",
@@ -10,6 +11,6 @@
   "lib_dirs": [],
   "port": 0,
   "engine_ready_s": 3600,
-  "gpu": [4, 6],
+  "gpu": [5, 6],
   "gpus_asked": true
 }
