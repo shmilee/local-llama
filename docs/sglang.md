@@ -101,7 +101,8 @@ libcudart 同模式）；旧环境需手动
 
 ## 逐请求统计（llama-swap 集成）
 
-* `--enable-cache-report`（在 `default-sglang` 宏里）：在 OpenAI 响应返回
+* `--enable-cache-report`（原 `default-sglang` 宏，2026-11-16 随 sglang
+  条目归档，定义见 config/archive/）：在 OpenAI 响应返回
   `usage.prompt_tokens_details.cached_tokens`，llama-swap 的 Cached 列
   依赖该字段；不加则 `prompt_tokens_details` 为 null，统计显示 "-"。
 * radix cache 对短 prompt 也能命中（如 81-token prompt 命中 64），
@@ -109,16 +110,19 @@ libcudart 同模式）；旧环境需手动
 * SGLang 的 OpenAI 响应**不含逐请求时延字段**（无 ttft/itl/throughput；
   llama.cpp 有 `timings` 对象、vLLM 有 `metrics` 对象，SGLang 两者皆无），
   投机解码统计在 `sglext.spec_tokens_details`（请求级
-  `return_spec_tokens_details` 开启）。conf 的 sglang 条目已用
+  `return_spec_tokens_details` 开启）。conf 的 sglang 条目（2026-11-16 已归档，见 config/archive/）用
   `filters.setParams` 注入该 flag，响应恒带 `sglext`（llama-swap 对
-  未知字段原样透传，客户端可直接读）。llama-swap（v260，上游 main
-  亦同）只解析前两种格式，故 SGLang 后端的 Prefill/Decode 速率与
-  Drafted 列无数据来源，llama-swap 侧显示 unknown / "-"；本地补丁版
-  llama-swap 解析该字段并加客户端 decode 速率测量（流式：首写时刻≈TTFT，
-  见 `docs/llama-swap.md` 本地补丁节）。Decode 列另依赖流式 usage：
+  未知字段原样透传，客户端可直接读）。llama-swap（上游）只解析
+  前两种格式，故 SGLang 后端的 Prefill/Decode 速率与
+  Drafted 列无数据来源，llama-swap 侧显示 unknown / "-"；
+  Decode 列另依赖流式 usage：
   SGLang 仅当请求带 `stream_options: {"include_usage": true}` 才在末块
   返回 usage，conf 的 sglang 条目已经 `setParams` 注入。Prefill 列仍无
   数据来源（首写含排队，口径与后端上报不可比，有意不填）。
+  （v262 及以前有本地补丁版 llama-swap 解析 sglext 并加客户端 decode
+  速率测量，补丁 2026-11-16 移除，见 `docs/llama-swap.md`「官方二进制」
+  节；若将来恢复 sglang LLM 条目且需要这些列，按当时上游 tag 重新
+  生成补丁。）
 
 ## 混合注意力（GDN）模型的关键点
 

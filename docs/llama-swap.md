@@ -50,10 +50,10 @@ llama-swap-start.sh                           # 启动脚本
 
 * `macros`：可复用命令片段，`${MACRO_NAME}` 展开，支持 `${env.VAR}` /
   `${PORT}` / `${MODEL_ID}` / `${models_dir}` / `${ctx_256k}` 等。
-  三种后端的公共前缀：
+  两种后端的公共前缀：
   - `default-llama`  — `pixi run -e llamacpp-cuda llama-server ...`
   - `default-vllm`   — `pixi run -e vllm-cuda vllm serve ...`
-  - `default-sglang` — `pixi run -e sglang-cuda sglang serve ...`
+  （`default-sglang` 宏 2026-11-16 随 sglang 条目归档，定义见 config/archive/）
   - 宏依赖 pixi 环境（`pixi run -m ${env.HOME}/local-llama -e <env>`），
     部署目录须是本仓库（pixi 项目）。
 * `models`：每个模型一条，key 是 API 请求用的模型 ID：
@@ -76,28 +76,32 @@ llama-swap-start.sh                           # 启动脚本
 
 ### 模型清单（PRO6000）
 
+模型清单、状态、实测与决策记录以 `docs/models/README.md` 为单一来源；
+逐模型历史见 `docs/models/<模型>.md`。
+
+在役条目（2026-11-16 归档后）：
+
 | 模型 ID | 后端 | 模型文件 |
 | ------- | ---- | -------- |
 | `Qwen3.8-27B` | llama.cpp | GGUF UD-Q8_K_XL + mmproj |
-| `Qwen3.8-27B-1M` | llama.cpp（YaRN） | 同上 GGUF，q8_0 KV |
-| `Qwen3.8-27B-vllm` | vLLM | FP8（~31G，单卡） |
-| `Qwen3.8-27B-vllm-1M` | vLLM（YaRN） | 同上 FP8 |
-| `Qwen3.8-27B-sglang` | SGLang | FP8 |
-| `Qwen3.8-Flash-Next` | llama.cpp | GGUF UD-IQ4_XS (3 分片) + mmproj |
-| `Qwen3.8-Flash-Next-1M` | llama.cpp（YaRN） | 同上 GGUF（1M 上下文，双卡层切分） |
-| `Qwen3.8-Flash-Next-vllm` | vLLM | NVFP4（单卡 96G） |
+| `Qwen3.8-27B-vllm-1M` | vLLM（YaRN） | FP8 |
 | `Qwen3.8-Flash-Next-vllm-1M` | vLLM（YaRN） | NVFP4（1M 上下文，TP2） |
-| `Qwen3.8-Flash-Next-sglang` | SGLang | NVFP4（单卡 96G） |
+| `DeepSeek-V4.1-Flash` | strata dsv41 | ISTA-DAS IQ2_XXS + Engram + DSpark |
+| `Qwen3.8-Flash-Next-Strata` | strata flash_next | ISTA-DAS IQ3_XXS（1M，视觉已启用） |
+
+已归档 7 条目：`config/archive/llama-swap-config-PRO6000-20261116.yaml`
+（含注释与宏定义，恢复方法见该文件头）。
 
 * `-1M` 变体：同一份权重加 YaRN ×4 外推到 1M 上下文，与 262K 条目是
   各自独立的进程（互相切换 = 卸载 + 重载）；踩坑见 `docs/llama.cpp.md`
   与 `docs/vllm.md` 的「长上下文（YaRN 1M）」节。
 * GPU 分配见 conf `env`：卡号可选（以 conf 实际值为准），均避开 CUDA0
   （防 CLIP 误用）；唯一不变式是 27B 家族与 Flash-Next 家族不共卡
-  （两组可并存）。两个 1M 条目带 numactl NUMA 绑定，node 编号须与所选
-  卡所在 socket 一致（见下文「NUMA / CPU 绑定」）。
-* `routing` 两个 group 与家族对应：group1 = 27B 家族（含 1M 变体），
-  group2 = Flash-Next 家族；组内换模型即卸载，两组可并存。
+  （两组可并存）。`Qwen3.8-Flash-Next-vllm-1M` 带 numactl NUMA 绑定，
+  node 编号须与所选卡所在 socket 一致（见下文「NUMA / CPU 绑定」）。
+* `routing` 两个 group 与家族对应：group1 = 27B 家族（2 条目），
+  group2 = Flash-Next 家族（1 条目）；组内换模型即卸载，两组可并存。
+  两个 strata 条目暂不编组。
 
 vLLM / SGLang 后端的参数要点见 `docs/vllm.md` / `docs/sglang.md`。
 
@@ -105,8 +109,8 @@ vLLM / SGLang 后端的参数要点见 `docs/vllm.md` / `docs/sglang.md`。
 
 PRO6000 为双路（无 NVLink）：GPU 0-3 挂 NUMA node 0，GPU 4-7 挂 node 1
 （`nvidia-smi topo -m` 的 NUMA Affinity 列；同 socket 卡对为 `NODE`，
-跨 socket 为 `SYS`）。两个 1M 条目（`Qwen3.8-Flash-Next-1M` /
-`Qwen3.8-Flash-Next-vllm-1M`）的 cmd 以 `numactl --cpunodebind=1` 包裹
+跨 socket 为 `SYS`）。1M 条目（`Qwen3.8-Flash-Next-vllm-1M`；已归档的
+`Qwen3.8-Flash-Next-1M` 同法）的 cmd 以 `numactl --cpunodebind=1` 包裹
 （当前选 4,6，均在 node 1，故编号为 1；改选卡时先确认所选卡所在 node
 再改编号）：
 
@@ -136,39 +140,27 @@ PRO6000 为双路（无 NVLink）：GPU 0-3 挂 NUMA node 0，GPU 4-7 挂 node 1
   `yum install numactl` / `apt install numactl`）；缺失时条目启动报
   `command not found`，装好或去掉前缀（去掉只损失性能，不影响正确性）。
 
-## 本地补丁（sglext 投机解码统计）
+## 官方二进制与版本更新
 
-* `patches/llama-swap-sglext-v262.patch`：
-  - 解析 SGLang 的 `sglext.spec_tokens_details`（请求级
-    `return_spec_tokens_details`，conf 的 sglang 条目已经
-    `filters.setParams` 注入），为 Activity 页 Drafted 列提供数据源
-    （spec_num_proposed_drafts → DraftTokens，
-    spec_num_correct_drafts → DraftAccTokens）。上游暂不支持
-    （vLLM spec decode 统计 #1032 为先例）。
-  - 客户端 decode 速率：`responseBodyCopier` 记录首个非空字节写到客户端
-    的时刻（流式响应即实测 TTFT）；后端未上报速率（SGLang 的 OpenAI
-    响应无任何逐请求计时字段）且为流式响应时，`buildMetrics` 回退
-    `output / (总时长 − 首写)`。非流式路径不触发（单次写入发生在末尾，
-    窗口无意义）；Prefill 列不填（首写含排队时间，与后端上报口径不可比）。
-  - `sendLoadingState` 的 loading 流先于真实响应写到客户端，
-    `finishLoading`（router/base.go）随即调 copier 的
-    `ResetFirstWrite()` 重置时钟，冷启动流式请求的 TTFT 仍从首个真实
-    chunk 起算。
-  - 数据源前提：SGLang 流式响应仅当请求带
-    `stream_options: {"include_usage": true}`（OpenAI 惯例）才在末块返回
-    usage；conf 的 sglang 条目经 `setParams` 注入（与
-    `return_spec_tokens_details` 同处），流式请求的 Decode 列与
-    Activity 页 in/out token 数依赖它。
-* 构建安装：`bash scripts/llama-swap-build.sh`——下载固定 tag 的
-  官方源码包（TAG/COMMIT 硬编码于脚本，与补丁一致；非 git 克隆）、
-  打补丁、npm 构建前端 UI 并以 `embed_ui` tag 嵌入、编译、装 `bin/`
-  （版本串显示 `<tag>-patched`）。源码包与构建位于 `download/`
-  （与 llama.cpp 约定一致，幂等可重跑）；go/node 均优先用 PATH 中的
-  系统版本，回退 `$HOME/.local/{go,node}`；模块走 goproxy.cn。
-  官方预编译二进制不含本补丁，`bin/` 不入库，部署后须跑一次脚本。
-* 上游发新版：手动更新脚本 TAG/COMMIT，按新 tag 源码重新生成补丁
-  文件（文件名带新 tag），再跑 `bash scripts/llama-swap-build.sh`
-  （触点：internal/server/metrics.go 的 responseBodyCopier /
-  processStreamingResponse / parseMetrics / buildMetrics，
-  internal/router/base.go 的 finishLoading，及测试调用点）。
-* 安装后重启 llama-swap 生效。
+* 2026-11-16 起直接采用官方预编译 release（已含 UI），
+  安装/升级：`bash scripts/llama-swap-install.sh`——TAG 硬编码于脚本，
+  上游发新版后更新 TAG 重跑即可（下载幂等、sha256 按 release 的
+  checksums 校验）；下载在 `download/`，旧二进制保留 `bin/llama-swap.prev`
+  作首个回退基线，版本串显示官方 tag（如 `v273`）。
+* 安装后重启 llama-swap 生效。注意重启会卸载在跑的模型
+  （vLLM 1M 冷加载 ~18min），选空闲时段执行。
+* v262 及以前的本地补丁构建（源码打补丁 + npm 嵌 UI + go 编译）已于
+  2026-11-16 移除：
+  - 补丁三块内容：解析 SGLang `sglext.spec_tokens_details`（Activity 页
+    Drafted 列）、SGLang 流式 decode 速率回退（首写字节时间窗，
+    后端自报速率时不触发）、`sendLoadingState` loading 流的首写时钟
+    重置（仅为前两项修正）。
+  - 受益者仅为 SGLang LLM 条目（同日归档）；现役 llama.cpp / vLLM /
+    Strata 后端均自报逐请求指标（Strata 的 `strata serve` 返回
+    llama.cpp 风格 `timings`），补丁对它们零效果。
+  - 规划的 SGLang 用途是 T2I：无 token/投机解码/流式 decode，
+    补丁不触发，T2I 条目也不需要 `setParams` 注入统计参数。
+  - 补丁与旧构建脚本可从 git 历史找回（83d14e7、64d2624）；若将来
+    恢复 SGLang LLM 条目且需要 Drafted/Decode 列，按当时上游 tag
+    重新生成（v269 起触点在 `internal/server/usage/` 的按后端
+    extractor 与 metrics 中间件的 `responseBodyCopier`）。
