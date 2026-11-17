@@ -10,11 +10,12 @@ openchamber/
 # 日志
 logs/
 
-# llama-swap 活动数据库（含请求明细，隐私数据，不入库）
+# llama-swap 活动数据库（含请求明细，隐私数据，不入库；llama-swap-start.sh 按需创建）
 activities/
 
 # 测试数据（图片 / 网页大文件，不入库）
-test-results/
+test-results/*
+!test-results/.gitkeep
 
 # 本机配置与密钥（llama-swap-start.sh / openchamber-start.sh 自动 source）
 local.env

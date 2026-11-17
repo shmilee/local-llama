@@ -104,7 +104,8 @@ if [ -n "$missing" ]; then
     exit 1
 fi
 
-mkdir -p "$LOG_DIR"
+# activities/ 存放活动数据库（配置 store.path 指向），同 logs 按需创建
+mkdir -p "$LOG_DIR" "$SCRIPT_DIR/activities"
 
 echo "Starting llama-swap"
 echo "  Binary: $BIN"
