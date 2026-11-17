@@ -19,6 +19,9 @@
 # healthCheckTimeout: number of seconds to wait for a model to be ready to serve requests
 # - optional, default: 120
 # - minimum value is 15 seconds, anything less will be set to this value
+# - when the health check reports loading progress, the countdown restarts each
+#   time the progress value changes, so this limits how long a load may go
+#   without progress
 healthCheckTimeout: 3600  # 60min（sglang Flash NVFP4 单卡冷加载实测 ~40min；vLLM ~18min）
 
 # logLevel: sets the logging value
@@ -52,8 +55,15 @@ logToStdout: "both"
 # - optional, default: in-memory sqlite database capped by metricsMaxInMemory
 # - path is a sqlite database file path
 # - file-backed sqlite keeps activity logs across restarts
+# - persistCaptures: keep request/response captures in a second sqlite file
+#   next to path, named with _captures added to the base name, so
+#   /path/to/file.sqlite stores captures in /path/to/file_captures.sqlite
+#   - optional, default: false (captures are kept in memory)
+#   - total size is capped by captureBuffer; the oldest captures are deleted
+#   - keep or move the two files together
 store:
   path: ${env.HOME}/local-llama/activity-PRO6000.sqlite
+#   persistCaptures: true
 
 # metricsMaxInMemory: maximum number of metrics to keep in memory
 # - optional, default: 1000
@@ -62,9 +72,10 @@ store:
 # - when persistent sqlite storage is defined in store.path this has no effect
 metricsMaxInMemory: 1000
 
-# captureBuffer: how many MBs to allocate for storing request/response captures
-# - optional, default: 10
+# captureBuffer: how many MBs of compressed request/response captures to keep
+# - optional, default: 5
 # - set to 0 to disable
+# - also caps the captures database file when store.persistCaptures is true
 captureBuffer: 15
 
 # ui.activity.session_id: ordered request headers used to identify sessions in
@@ -88,9 +99,19 @@ performance:
   # - minimum duration 5s
   every: 5s
 
+# helpagent: the UI's Help page, a chat that answers questions about llama-swap
+# from its documentation, configuration and source code
+helpagent:
+  # disable: boolean
+  # - optional, default: false
+  # - true hides Help in the UI and does not serve the /api/mcp endpoint
+  #   whose tools the Help page uses
+  disable: false
+
 # startPort: sets the starting port number for the automatic ${PORT} macro.
 # - optional, default: 5800
-# - the ${PORT} macro can be used in model.cmd and model.proxy settings
+# - the ${PORT} macro can be used in model.cmd, and elsewhere in that model once
+#   model.cmd uses it
 # - it is automatically incremented for every model that uses it
 startPort: 16000
 
@@ -100,6 +121,9 @@ startPort: 16000
 # - when true, a stream of loading messages will be sent to the client in the
 #   reasoning field so chat UIs can show that loading is in progress.
 # - see #366 for more details
+# - this is for chat clients. To show a real progress bar on the Models page,
+#   have your server report progress from its checkEndpoint: see the "Loading
+#   progress" section of guides/model-runtime/writing-cmd.
 sendLoadingState: true
 
 # includeAliasesInList: present aliases within the /v1/models OpenAI API listing
@@ -130,6 +154,14 @@ unloadTimeout: 10
 #   response immediately, rather than being queued
 # - see issue #1086
 globalConcurrencyLimit: 0
+
+# maxRequestBodyMB: maximum size, in megabytes, of a request body sent to a
+# model endpoint (chat, completions, embeddings, audio, images, etc.)
+# - optional, default: 250
+# - must be 1 or more
+# - larger requests receive an HTTP 413 Request Entity Too Large response
+# - raise it for large audio uploads or many base64 images in one request
+maxRequestBodyMB: 50
 
 # macros: a dictionary of string substitutions
 # - optional, default: empty dictionary
@@ -1108,7 +1140,7 @@ hooks:
 
 # routing:
 # Controls how llama-swap decides which models can run at the same time and
-# which get swapped out. Choose one of two swap engines:
+# which get swapped out. Choose one of three swap engines:
 #
 # - group:  the default engine. Simpler to configure. You define groups of
 #           models that run together, and loading one group typically unloads
@@ -1119,16 +1151,34 @@ hooks:
 #           model combinations are allowed to run concurrently, enabling
 #           setups that groups cannot express.
 #
+# - capacity: declare resource pools and each local model's requirements.
+#             Any combination that fits every pool's limit may coexist.
+#
 # The routing section is optional.
 routing:
   router:
     # use: a string defining which engine to use
     # - optional, default: "group"
-    # - valid values: group, matrix
+    # - valid values: group, matrix, capacity
     use: group
 
     # settings: a dictionary of settings for the specific engines
     settings:
+      # capacity: independent resource limits (no automatic measurement)
+      # - used when routing.router.use is capacity; other settings may remain
+      # - cannot combine with legacy top-level groups/matrix either
+      # - pools: dictionary of names to positive integer limits
+      # - units are operator-chosen per pool, matching models.*.capacities
+      # - unknown pools, requirements exceeding a limit, and invalid values fail
+      # - minimizes summed evict_cost, then eviction count, then sorted IDs;
+      #   a bounded search may return a feasible nonoptimal plan
+      # - only resident models are searched; only the requested model is started
+      # capacity:
+      #   pools:
+      #     ram: 128000
+      #     gpu0: 24000
+      #     gpu1: 24000
+
       # groups: a dictionary of named groups
       # - optional, default: empty dictionary
       # - lets you keep some models loaded while others swap out
