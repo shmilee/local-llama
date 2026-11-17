@@ -53,7 +53,8 @@ llama-swap-start.sh                           # 启动脚本
   两种后端的公共前缀：
   - `default-llama`  — `pixi run -e llamacpp-cuda llama-server ...`
   - `default-vllm`   — `pixi run -e vllm-cuda vllm serve ...`
-  （`default-sglang` 宏 2026-11-16 随 sglang 条目归档，定义见 config/archive/）
+  （`default-sglang` 宏 2026-11-16 随 sglang 条目归档，展开后的命令见
+  `docs/models/Qwen3.8-27B.md` / `docs/models/Qwen3.8-Flash-Next.md`）
   - 宏依赖 pixi 环境（`pixi run -m ${env.HOME}/local-llama -e <env>`），
     部署目录须是本仓库（pixi 项目）。
 * `models`：每个模型一条，key 是 API 请求用的模型 ID：
@@ -89,8 +90,8 @@ llama-swap-start.sh                           # 启动脚本
 | `DeepSeek-V4.1-Flash` | strata dsv41 | ISTA-DAS IQ2_XXS + Engram + DSpark |
 | `Qwen3.8-Flash-Next-Strata` | strata flash_next | ISTA-DAS IQ3_XXS（1M，视觉已启用） |
 
-已归档 7 条目：`config/archive/llama-swap-config-PRO6000-20261116.yaml`
-（含注释与宏定义，恢复方法见该文件头）。
+已归档 7 条目（2026-11-16）：cmd 与实测冻结于对应模型文档
+（`docs/models/Qwen3.8-27B.md` / `docs/models/Qwen3.8-Flash-Next.md`）。
 
 * `-1M` 变体：同一份权重加 YaRN ×4 外推到 1M 上下文，与 262K 条目是
   各自独立的进程（互相切换 = 卸载 + 重载）；踩坑见 `docs/llama.cpp.md`

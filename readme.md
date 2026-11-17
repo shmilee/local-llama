@@ -47,8 +47,10 @@ pixi run -e sglang-cuda    sglang-cuda-verify
 | [docs/llama.cpp.md](docs/llama.cpp.md) | llama.cpp 安装/编译/运行 |
 | [docs/vllm.md](docs/vllm.md) | vLLM 启动参数、工具链要点、已知坑 |
 | [docs/sglang.md](docs/sglang.md) | SGLang 启动参数、混合注意力（GDN）要点 |
+| [docs/strata.md](docs/strata.md) | Strata 引擎（dsv41 / flash_next）pack、实测、llama-swap 集成 |
 | [docs/sd.cpp.md](docs/sd.cpp.md) | stable-diffusion.cpp（T2I）安装、构建选项、sd-server 端点 |
-| [docs/models.md](docs/models.md) | 模型挑选、量化说明、下载记录、chat templates |
+| [docs/models.md](docs/models.md) | 模型挑选、量化说明、下载记录、chat templates（候选池） |
+| [docs/models/](docs/models/README.md) | 模型资产文档：状态、实测快照、决策记录（结构已定，内容待迁移） |
 | [docs/speed-report.md](docs/speed-report.md) | 速度测试报告 |
 | [docs/issue-opencode-long-context-timeout.md](docs/issue-opencode-long-context-timeout.md) | issue 记录：长上下文请求/压缩在 ~300 s 被中断（opencode 三个超时 × 静默链路 × 冷 prefill）的排查与修复 |
 

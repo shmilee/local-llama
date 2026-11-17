@@ -1,0 +1,486 @@
+# llama-swap PRO6000 配置 —— 已归档模型条目（2026-11-16）
+# -------------------------------------
+# 本文件是参考归档，不是可运行配置。
+#   * 下列条目于 2026-11-16 从 config/llama-swap-config-PRO6000.yaml 移除
+#     （后端重复 / 使用量低）。
+#   * 恢复某条目：把对应块拷回主配置 models:，并核对本文件宏定义与主配置
+#     当前定义一致（主配置若已更新，以主配置为准）。
+# 使用量（activity-PRO6000.sqlite 快照，2026-09-12 → 2026-11-13）：
+#   * Qwen3.8-27B-1M             86 次（2026-10-14 单日）
+#   * Qwen3.8-Flash-Next        199 次（最后 2026-10-23）
+#   * Qwen3.8-Flash-Next-1M       8 次（2026-10-15）
+#   * Qwen3.8-27B-vllm            6 次（2026-10-08）
+#   * Qwen3.8-27B-sglang        135 次（2026-10-08 → 10-09）
+#   * Qwen3.8-Flash-Next-vllm     9 次（2026-10-08）
+#   * Qwen3.8-Flash-Next-sglang    0 次
+# 模型史、实测与决策记录：docs/models/Qwen3.8-27B.md、docs/models/Qwen3.8-Flash-Next.md
+
+macros:
+  # vLLM（pixi 环境 vllm-cuda，PyPI + torch cu130，见 docs/pixi-environments.md）
+  # 参数测试：
+  #  * --enable-per-request-metrics：启用后，vLLM 响应中会包含usage、metrics 对象
+  #    这些信息可用于 llama-swap  计算解码速率等。
+  #  * --per-request-spec-decode-metrics：在 API 响应里返回请求的投机解码统计信息
+  #  * --max-num-seqs：设置引擎最大并发处理序列数，多余的请求会在等待池中排队
+  #  * --tensor-parallel-size：指定张量并行大小，即模型在多少个GPU上进行切分并行计算。
+  #    1 表示不使用张量并行，模型在单个GPU上运行
+  #  * --kv-cache-dtype fp8：设置 KV缓存的数据类型为 fp8
+  #  * --enable-prefix-caching：复用已计算好的 KV cache，跳过重复 prefill，默认启用
+  #  * --prefix-match-unit：prefill 缓存键的最细 token 边界。
+  #    越小，前缀匹配越精细，缓存命中率越高，但元数据开销越大。
+  #    前缀缓存对 Mamba 混合模型的行为边界（Qwen3.8-27B）见 docs/vllm.md。
+  "default-vllm": >
+    pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
+    --host 127.0.0.1 --port ${PORT}
+    --enable-per-request-metrics
+    --enable-prompt-tokens-details
+    --per-request-spec-decode-metrics summary
+    --max-num-seqs 8
+    --tensor-parallel-size 1
+    --kv-cache-dtype fp8
+    --enable-prefix-caching
+    --prefix-match-unit 64
+    --sse-keep-alive-interval 15
+
+  # SGLang（pixi 环境 sglang-cuda，PyPI + torch cu130，见 docs/pixi-environments.md）
+  # 参数测试：
+  #  * --enable-metrics：Prometheus /metrics 端点（进程级指标）
+  #  * --enable-cache-report：在 OpenAI 响应的 usage.prompt_tokens_details
+  #    返回 cached_tokens，供 llama-swap 统计 Cached 列
+  "default-sglang": >
+    pixi run -m ${env.HOME}/local-llama -e sglang-cuda sglang serve
+    --host 127.0.0.1 --port ${PORT}
+    --enable-metrics
+    --enable-cache-report
+
+  # Example of environment variable macros
+  # - ${env.VAR_NAME} pulls the value from the system environment
+  # - useful for paths, secrets, or machine-specific configuration
+  "models_dir": /data/huggingface-downloads
+
+  # context size
+  "ctx_64k": 65536
+  "ctx_128k": 131072
+  "ctx_256k": 262144
+  "ctx_1m": 1000000
+
+models:
+  # 1b. q27b @ 1M —— llama.cpp + YaRN（原生 262144 → 1M）
+  # - 依据：模型卡「262,144 natively and extensible up to 1,000,000 tokens」
+  #   https://huggingface.co/Qwen/Qwen3.8-27B#processing-ultra-long-texts
+  # - GGUF 元数据 context_length 仍为 262144；llama.cpp 有硬检查会拒绝超过
+  #   元数据的 --ctx-size，须用 --override-kv 抬高（同 checkpoint 实测复现，
+  #   llama.cpp issue #27090，b10434；本仓库 b10909 更新）
+  # - YaRN 参数同样取自该复现：rope-scale 4 × yarn-orig-ctx 262144
+  # - 已知问题：issue #27090 报 CUDA 下 ~520K prefill 静默崩溃，仍待上游修复
+  # - 1M 下 f16 KV 显存不可行（16 个全注意力层），按实测改用 q8_0 KV
+  # - 不复用 default-llama 宏：需替换 KV 类型并追加 YaRN/override 参数
+  "Qwen3.8-27B-1M":
+    cmd: |
+      pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
+      --port ${PORT}
+      --n-gpu-layers all --device CUDA0
+      --model ${models_dir}/Qwen3.8-27B/Qwen3.8-27B-UD-Q8_K_XL.gguf
+      --mmproj ${models_dir}/Qwen3.8-27B/mmproj-BF16.gguf
+      --mmproj-offload
+      --load-mode auto --flash-attn on --fit off
+      --cache-type-k q8_0 --cache-type-v q8_0
+      --kv-unified
+      --ubatch-size 4096
+      --ctx-size ${ctx_1m}
+      --rope-scaling yarn --rope-scale 4 --yarn-orig-ctx 262144
+      --override-kv qwen35.context_length=int:1000000
+      --cache-ram 12288
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/peculiar-ragdoll-v22.5.0.jinja
+      --reasoning on --reasoning-format deepseek
+      --spec-type draft-mtp --spec-draft-n-max 3
+    env:
+      - "CUDA_VISIBLE_DEVICES=2"
+    description: "Dense model (27B) from Aliyun Qwen (Thinking), llama.cpp + YaRN, 1M context"
+    metadata:
+      port: ${PORT}
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_1m} (YaRN x4)"
+    ttl: 36000
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 1000000
+
+  # 2. q38fn
+  # N-gram offloaded to RAM (mmap), TODO MTP enabled
+  "Qwen3.8-Flash-Next":
+    cmd: |
+      pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
+      --model ${models_dir}/Qwen3.8-Flash-Next/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      --mmproj ${models_dir}/Qwen3.8-Flash-Next/mmproj-F16.gguf
+      --port ${PORT}
+      --n-gpu-layers all --device CUDA0
+      --n-cpu-moe 0
+      --mmproj-offload
+      --load-mode mmap+mlock --flash-attn on --fit off
+      --cache-type-k q8_0 --cache-type-v q8_0
+      --kv-unified
+      --ubatch-size 256
+      --cache-ram 12288
+      --ctx-size ${ctx_256k}
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/froggeric-v22.5.jinja
+      --reasoning on --reasoning-format deepseek
+    # MTP wait PR #28243
+    #  --model-draft ${models_dir}/Qwen3.8-Flash-Next/MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
+    #  --spec-type draft-mtp --spec-draft-n-max 2
+    env:
+      - "CUDA_VISIBLE_DEVICES=6"
+      - "GGML_CUDA_CUBLAS_COMPUTE_TYPE=fp32"
+    description: "MoE model (125B/6B active) from Aliyun Qwen"
+    aliases:
+      # - "Qwen3.8-Flash-Next"  # 保留旧模型名称，历史统计原地保留
+    metadata:
+      port: ${PORT}
+      note: "N-gram embedding in system RAM, full 256K context"
+    ttl: 36000
+    filters:
+      setParamsByID:
+        "${MODEL_ID}":
+          temperature: 1.0
+          top-p: 0.95
+          top-k: 20
+          min-p: 0.0
+          reasoning-budget: 8192
+          chat-template-kwargs:
+            preserve_thinking: true  # 保留思考过程
+            reasoning_effort: "medium"  # low, medium, xhigh
+        "${MODEL_ID}:xhigh":
+          temperature: 1.0
+          top-p: 0.95
+          top-k: 20
+          min-p: 0.0
+          chat-template-kwargs:
+            preserve_thinking: true
+            reasoning_effort: "xhigh"
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 262144
+
+  # 2b. q38fn @ 1M —— llama.cpp + YaRN（双卡层切分）
+  # - 依据同 27B-1M：模型卡原生 262144、YaRN ×4 可扩至 1M；GGUF 元数据 context_length
+  #   仍为 262144，须 --override-kv 抬高（arch 为 qwen4exp，b10909 源码核验）。
+  # - 显存：单卡 256k 实测 74.4G（docs/speed-report.md），1M q8_0 KV ~+15G
+  #   ≈ 90G 偏紧且贴近 #27090（~520K prefill 静默崩溃）风险区，故用双卡
+  #   层切分（与 vLLM-1M 同卡，group2 内互斥切换），每卡 ~45G 余量充足。
+  # - mrope sections [11,11,10] 在 GGUF 元数据内，--rope-scaling yarn 与
+  #   qwen35 同路径（b10909 llama-model.cpp 对 QWEN4EXP 有专门 case）。
+  # - 无 NVLink 时层切分仅残差流跨卡，decode 速度损耗可忽略。
+  # - numactl 只绑 CPU（--cpunodebind=1，GPU 4-7 所在 socket，nvidia-smi topo -m
+  #   核验）：N-gram 表 mmap+mlock ~70G 由默认 local 策略就近落在 node1，
+  #   逐 token 读取不跨 UPI。不加 --membind（只禁止回退、无额外收益，
+  #   node1 共 128G 还要容纳 ~70G 表与 page cache）。
+  #   参数含义见 docs/llama-swap.md「NUMA / CPU 绑定」。
+  "Qwen3.8-Flash-Next-1M":
+    cmd: |
+      numactl --cpunodebind=1 pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
+      --model ${models_dir}/Qwen3.8-Flash-Next/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      --mmproj ${models_dir}/Qwen3.8-Flash-Next/mmproj-F16.gguf
+      --port ${PORT}
+      --n-gpu-layers all --device CUDA0,CUDA1
+      --n-cpu-moe 0
+      --mmproj-offload
+      --load-mode mmap+mlock --flash-attn on --fit off
+      --cache-type-k q8_0 --cache-type-v q8_0
+      --kv-unified
+      --ubatch-size 256
+      --cache-ram 12288
+      --ctx-size ${ctx_1m}
+      --rope-scaling yarn --rope-scale 4 --yarn-orig-ctx 262144
+      --override-kv qwen4exp.context_length=int:1000000
+      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/froggeric-v22.5.jinja
+      --reasoning on --reasoning-format deepseek
+    # MTP wait PR #28243
+    #  --model-draft ${models_dir}/Qwen3.8-Flash-Next/MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
+    #  --spec-type draft-mtp --spec-draft-n-max 2
+    env:
+      - "CUDA_VISIBLE_DEVICES=4,6"
+      - "GGML_CUDA_CUBLAS_COMPUTE_TYPE=fp32"
+    description: "MoE model (125B/6B active) from Aliyun Qwen, llama.cpp + YaRN, 1M context (dual-GPU)"
+    metadata:
+      port: ${PORT}
+      note: "N-gram embedding in system RAM, 1M context (YaRN x4, dual-GPU layer split)"
+    ttl: 36000
+    filters:
+      setParamsByID:
+        "${MODEL_ID}":
+          temperature: 1.0
+          top-p: 0.95
+          top-k: 20
+          min-p: 0.0
+          reasoning-budget: 8192
+          chat-template-kwargs:
+            preserve_thinking: true  # 保留思考过程
+            reasoning_effort: "medium"  # low, medium, xhigh
+        "${MODEL_ID}:xhigh":
+          temperature: 1.0
+          top-p: 0.95
+          top-k: 20
+          min-p: 0.0
+          chat-template-kwargs:
+            preserve_thinking: true
+            reasoning_effort: "xhigh"
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 1000000
+
+  # 3. 27B vLLM 后端（FP8）
+  # - 参数参考: https://recipes.vllm.ai/Qwen/Qwen3.8-27B
+  # - 要点见 docs/vllm.md
+  "Qwen3.8-27B-vllm":
+    # vLLM 按启动路径注册模型名，须映射到该路径（llama.cpp 不校验 model 字段，无需此项）
+    useModelName: "${models_dir}/Qwen3.8-27B-FP8"
+    cmd: |
+      ${default-vllm}
+      ${models_dir}/Qwen3.8-27B-FP8
+      --max-model-len ${ctx_256k}
+      --reasoning-parser qwen3
+      --mm-encoder-tp-mode data
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_xml
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
+    env:
+      - "CUDA_VISIBLE_DEVICES=2"
+    description: "Dense model (27B) from Aliyun Qwen, FP8, vLLM backend"
+    aliases:
+      # - "Qwen3.6-27B-vllm"
+    metadata:
+      port: ${PORT}
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_256k}"
+    ttl: 36000
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 262144
+
+  # 4. 27B SGLang 后端（FP8）
+  # - 参数参考: https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.8
+  # - 要点见 docs/sglang.md
+  # 参数测试：
+  #  * --trust-remote-code: 允许加载模型自带的自定义代码。对于 Qwen3 系列等
+  #   包含特殊架构或处理逻辑的模型，此参数是必须的。
+  #  * --attention-backend flashinfer: 指定使用 FlashInfer 作为 Attention 计算后端。
+  #    FlashInfer 是专为 LLM 推理优化的高效 Attention 引擎，可提供更低的延迟。
+  #  * --chunked-prefill-size 2048: 设置分块预填充（Chunked Prefill）的块大小为 2048。
+  #    将长提示词切分成小块处理，可有效降低长上下文预填充时的峰值显存占用，避免 OOM。
+  #  * --kv-cache-dtype fp8_e4m3: 将 KV Cache 的数据类型设置为 FP8 (E4M3 格式)，可大幅降低 KV Cache 的显存占用。
+  #  * --mem-fraction-static 0.85: 指定用于静态分配（模型权重 + KV Cache）的 GPU 显存比例。
+  #    0.85 表示预留 85% 的显存给模型和缓存，剩余 15% 用于运行时开销。显存不足时可适当调低此值。
+  #  * --mamba-full-memory-ratio 4.59: 针对 Mamba 层缓存与 KV Cache 之间的显存分配比例。
+  #    4.59 表示分配给 Mamba 缓存的显存约为 KV Cache 的 4.59 倍，这是针对 Qwen3.8-27B 混合架构的特定调优值。
+  #  * --mamba-radix-cache-strategy extra_buffer: 设置 Mamba 层的 Radix Cache 策略为 extra_buffer，
+  #    使用额外缓冲区来优化 Mamba 状态缓存的复用和管理。
+  #  * --mamba-ssm-dtype bfloat16: 指定 Mamba SSM（状态空间模型）状态的精度。
+  #    这比 bfloat16 精度更高，结果更准确，但会占用更多显存。
+  #  * --reasoning-parser qwen3: 启用针对 Qwen3 模型的推理内容解析器。
+  #  * --tool-call-parser qwen3_coder: 启用针对 Qwen3-Coder 系列模型的工具调用（Tool Call）解析器。
+  #  * --speculative-algorithm NEXTN: 投机解码，使用 checkpoint 内置的 MTP 头
+  #    （无需独立 draft 模型）。NEXTN 是 EAGLE 的别名，同一算法。
+  #    官方 cookbook（Qwen3.8-27B 页）推荐组合：3 步草稿、topk 1、每轮验证 4 个
+  #    候选 token（3 草稿 + 1 目标）。MTP 与 FlashInfer 搭配要求 flashinfer
+  #    比 0.6.15.post1 新（prefill plan 支持 uniform_q_len），本环境 0.6.18 满足。
+  #  * --mamba-track-interval（默认 256）须 ≥ speculative-num-draft-tokens，
+  #    默认值满足，无需显式指定。
+  "Qwen3.8-27B-sglang":
+    # SGLang 按 --model-path 注册模型名，须映射到该路径
+    useModelName: "${models_dir}/Qwen3.8-27B-FP8"
+    cmd: |
+      ${default-sglang}
+      --model-path ${models_dir}/Qwen3.8-27B-FP8
+      --trust-remote-code
+      --attention-backend flashinfer
+      --chunked-prefill-size 2048
+      --kv-cache-dtype fp8_e4m3
+      --mem-fraction-static 0.85
+      --mamba-full-memory-ratio 4.59
+      --mamba-radix-cache-strategy extra_buffer
+      --mamba-ssm-dtype bfloat16
+      --reasoning-parser qwen3
+      --tool-call-parser qwen3_coder
+      --speculative-algorithm NEXTN
+      --speculative-num-steps 3
+      --speculative-eagle-topk 1
+      --speculative-num-draft-tokens 4
+    env:
+      - "CUDA_VISIBLE_DEVICES=2"
+    filters:
+      setParams:
+        # sglang 逐请求投机解码统计（响应 sglext.spec_tokens_details）；
+        # 本地补丁版 llama-swap 解析入 Drafted 列（见 docs/llama-swap.md）
+        return_spec_tokens_details: true
+        # sglang 流式响应仅在显式 include_usage 时于末块返回 usage（OpenAI 惯例），
+        # 为 Activity 页 token 数与客户端 decode 速率测量提供数据源
+        stream_options:
+          include_usage: true
+    description: "Dense model (27B) from Aliyun Qwen, FP8, SGLang backend"
+    aliases:
+      # - "Qwen3.6-27B-sglang"
+    metadata:
+      port: ${PORT}
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_256k}"
+    ttl: 36000
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 262144
+
+  # 5. Flash NVFP4 (124G) vLLM 后端 —— 单卡 PRO6000
+  # - nvidia ModelOpt 混合精度导出；51B N-gram 表（PLE）默认 offload 到 CPU，
+  #   GPU 放 74G 权重；QSA 要求 BF16 主 KV、spec-decode-metrics 要求
+  #   speculative-config，故不复用 default-vllm 宏。详见 docs/vllm.md
+  "Qwen3.8-Flash-Next-vllm":
+    # vLLM 按启动路径注册模型名，须映射到该路径
+    useModelName: "${models_dir}/Qwen3.8-Flash-Next-NVFP4"
+    cmd: |
+      pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
+      ${models_dir}/Qwen3.8-Flash-Next-NVFP4
+      --host 127.0.0.1 --port ${PORT}
+      --quantization modelopt
+      --tensor-parallel-size 1
+      --gpu-memory-utilization 0.95
+      --max-model-len ${ctx_256k}
+      --max-num-seqs 4
+      --max-num-batched-tokens 8192
+      --enable-prefix-caching
+      --moe-backend marlin
+      --attention-config.indexer_kv_dtype fp8
+      --no-enable-flashinfer-autotune
+      --enable-per-request-metrics
+      --enable-prompt-tokens-details
+      --per-request-spec-decode-metrics summary
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+    env:
+      - "CUDA_VISIBLE_DEVICES=6"
+      - "VLLM_PLE_CPU_OFFLOAD=1"
+    description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, vLLM backend"
+    metadata:
+      port: ${PORT}
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_256k}"
+    ttl: 36000
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 262144
+
+  # 6. Flash NVFP4 (133G) SGLang 后端
+  "Qwen3.8-Flash-Next-sglang":
+    # SGLang 按 --model-path 注册模型名，须映射到该路径
+    # 全新环境首次加载前先跑 scripts/sglang-precompile-moe.py（见 docs/sglang.md）
+    useModelName: "${models_dir}/Qwen3.8-Flash-Next-NVFP4"
+    cmd: |
+      ${default-sglang}
+      --model-path ${models_dir}/Qwen3.8-Flash-Next-NVFP4
+      --tp 1
+      --fp4-gemm-backend flashinfer_cutlass
+      --moe-runner-backend flashinfer_cutlass
+      --page-size 64
+      --mamba-track-interval 64
+      --chunked-prefill-size 4096
+      --context-length 262144
+      --speculative-algorithm NEXTN
+      --speculative-num-steps 3
+      --speculative-eagle-topk 1
+      --speculative-num-draft-tokens 4
+      --mamba-radix-cache-strategy extra_buffer_lazy
+      --max-running-requests 4
+      --max-mamba-cache-size 12
+      --mamba-ssm-dtype bfloat16
+      --reasoning-parser qwen3
+      --mem-fraction-static 0.96
+      --ple-offload-embedding
+      --watchdog-timeout 3600
+    env:
+      - "CUDA_VISIBLE_DEVICES=6"
+      - "SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK=1"
+      - "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
+    filters:
+      setParams:
+        # sglang 逐请求投机解码统计（响应 sglext.spec_tokens_details）；
+        # 本地补丁版 llama-swap 解析入 Drafted 列（见 docs/llama-swap.md）
+        return_spec_tokens_details: true
+        # sglang 流式响应仅在显式 include_usage 时于末块返回 usage（OpenAI 惯例），
+        # 为 Activity 页 token 数与客户端 decode 速率测量提供数据源
+        stream_options:
+          include_usage: true
+    description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, SGLang backend"
+    metadata:
+      port: ${PORT}
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_256k}"
+    ttl: 36000
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 262144
+

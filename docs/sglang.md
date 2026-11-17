@@ -102,7 +102,7 @@ libcudart 同模式）；旧环境需手动
 ## 逐请求统计（llama-swap 集成）
 
 * `--enable-cache-report`（原 `default-sglang` 宏，2026-11-16 随 sglang
-  条目归档，定义见 config/archive/）：在 OpenAI 响应返回
+  条目归档，展开后的命令见 `docs/models/`）：在 OpenAI 响应返回
   `usage.prompt_tokens_details.cached_tokens`，llama-swap 的 Cached 列
   依赖该字段；不加则 `prompt_tokens_details` 为 null，统计显示 "-"。
 * radix cache 对短 prompt 也能命中（如 81-token prompt 命中 64），
@@ -110,7 +110,7 @@ libcudart 同模式）；旧环境需手动
 * SGLang 的 OpenAI 响应**不含逐请求时延字段**（无 ttft/itl/throughput；
   llama.cpp 有 `timings` 对象、vLLM 有 `metrics` 对象，SGLang 两者皆无），
   投机解码统计在 `sglext.spec_tokens_details`（请求级
-  `return_spec_tokens_details` 开启）。conf 的 sglang 条目（2026-11-16 已归档，见 config/archive/）用
+  `return_spec_tokens_details` 开启）。conf 的 sglang 条目（2026-11-16 已归档）用
   `filters.setParams` 注入该 flag，响应恒带 `sglext`（llama-swap 对
   未知字段原样透传，客户端可直接读）。llama-swap（上游）只解析
   前两种格式，故 SGLang 后端的 Prefill/Decode 速率与

@@ -43,7 +43,8 @@ llama-cli -m XX.gguf --mmproj XX-mmproj-BF16.gguf
 ## 长上下文（YaRN 1M）
 
 Qwen3.8-27B 原生上限 262,144，模型卡称 YaRN 可扩至 1,000,000。
-配置见 `config/llama-swap-config-PRO6000.yaml` 的 `Qwen3.8-27B-1M` 条目。
+条目已于 2026-11-16 归档；cmd 见 `docs/models/Qwen3.8-27B.md`
+「Qwen3.8-27B-1M」节。
 
 ```
 llama-server -m Qwen3.8-27B-UD-Q8_K_XL.gguf \
@@ -72,8 +73,9 @@ llama-server -m Qwen3.8-27B-UD-Q8_K_XL.gguf \
 
 ### Qwen3.8-Flash-Next 1M（双卡层切分）
 
-配置见 `Qwen3.8-Flash-Next-1M` 条目（与 `Qwen3.8-Flash-Next-vllm-1M` 同卡，
-group2 内互斥切换，互为 vLLM/llama.cpp 对照）：
+条目已于 2026-11-16 归档，cmd 见 `docs/models/Qwen3.8-Flash-Next.md`
+「Qwen3.8-Flash-Next-1M」节（vLLM 对照条目 `Qwen3.8-Flash-Next-vllm-1M`
+仍在役，两者均用卡 4,6）：
 
 * arch 为 `qwen4exp`（b10909 `src/llama-arch.cpp` 核验），故
   `--override-kv qwen4exp.context_length=int:1000000`。

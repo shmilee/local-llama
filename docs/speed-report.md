@@ -1,50 +1,8 @@
 # PRO6000 w/ llama.cpp
 
-## cmd
-
-```
-"default-llama": >
-    ${env.HOME}/local-llama/bin/llama-server
-    --port ${PORT}
-    --n-gpu-layers all --device CUDA0
-    --mmproj-offload
-    --load-mode auto --flash-attn on --fit off
-    --cache-type-k f16 --cache-type-v f16
-    --kv-unified
-    --ubatch-size 4096
-
-${default-llama}
-    --model ${models_dir}/Qwen3.6-35B-A3B/Qwen3.6-35B-A3B-UD-Q8_K_XL.gguf
-    --mmproj ${models_dir}/Qwen3.6-35B-A3B/mmproj-BF16.gguf
-    --ctx-size ${ctx_256k}
-    --cache-ram 12288
-    --spec-type draft-mtp --spec-draft-n-max 3
-```
-
-```
-${default-llama}
-    --model ${models_dir}/Qwen3.8-27B/Qwen3.8-27B-UD-Q8_K_XL.gguf
-    --mmproj ${models_dir}/Qwen3.8-27B/mmproj-BF16.gguf
-    --ctx-size ${ctx_256k}
-    --cache-ram 12288
-    --spec-type draft-mtp --spec-draft-n-max 3
-```
-
-```
-${env.HOME}/local-llama/bin/llama-server
-    --model ${models_dir}/Qwen3.8-Flash-Next/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
-    --mmproj ${models_dir}/Qwen3.8-Flash-Next/mmproj-F16.gguf
-    --port ${PORT}
-    --n-gpu-layers all --device CUDA0
-    --n-cpu-moe 0
-    --mmproj-offload
-    --load-mode mmap+mlock --flash-attn on --fit off
-    --cache-type-k q8_0 --cache-type-v q8_0
-    --kv-unified
-    --ubatch-size 4096
-    --cache-ram 12288
-    --ctx-size ${ctx_256k}
-```
+> 本文件是纯实测数据台账（Memory + report 表），新测试批次照常 append；
+> 各条目的 cmd（宏已展开）与模型史见 `docs/models/<模型>.md`。
+> 开头的 Memory 为 2026-09-12 首批部署时的测试记录。
 
 
 ## Memory
@@ -54,23 +12,6 @@ ${env.HOME}/local-llama/bin/llama-server
 | Qwen3.6-35B-A3B | 47804MiB | 3.4G |
 | Qwen3.8-27B     | 53092MiB | 4.1G |
 | Qwen3.8-Flash-Next | 74434MiB | 31G |
-
-
-## Qwen3.6-35B-A3B
-
-| Summary | |
-| --- | --- |
-| Cached | 308 |
-| Prompt | 1,702 (1607.66 t/s) |
-| Generated | 6,498 (219.16 t/s) |
-| Drafted | 63.8% 4269/6696 |
-
-| ID | Time | Source/Caller | Status | Cached | Prompt | Generated | Prefill | Decode | Duration |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 4 | 2026-09-12 22:56:59 | ip:127.0.0.1 | 200 | 263 | 1,427 | 1,841 | 3876.40 t/s | 212.25 t/s | 9.37s |
-| 3 | 2026-09-12 22:54:22 | ip:127.0.0.1 | 200 | 38 | 229 | 3,099 | 923.58 t/s | 222.75 t/s | 14.37s |
-| 2 | 2026-09-12 22:53:34 | ip:127.0.0.1 | 200 | 7 | 35 | 767 | 148.18 t/s | 213.99 t/s | 3.93s |
-| 1 | 2026-09-12 22:53:21 | ip:127.0.0.1 | 200 | - | 11 | 791 | 53.29 t/s | 227.38 t/s | 3.69s |
 
 
 ## Qwen3.8-27B
@@ -91,192 +32,11 @@ ${env.HOME}/local-llama/bin/llama-server
 | 5 | 2026-09-12 23:03:09 | ip:127.0.0.1 | 200 | - | 53 | 49 | 100.54 t/s | 73.16 t/s | 1.19s |
 
 
-## Qwen3.8-Flash-Next
-
-| Summary | |
-| --- | --- |
-| Cached | 2,810 |
-| Prompt | 2,887 (1147.23 t/s) |
-| Generated | 3,870 (91.62 t/s) |
-| Drafted | - |
-
-| ID | Time | Source/Caller | Status | Cached | Prompt | Generated | Prefill | Decode | Duration |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 14 | 2026-09-12 23:20:34 | ip:127.0.0.1 | 200 | 2,685 | 59 | 1,048 | 184.74 t/s | 90.69 t/s | 11.89s |
-| 13 | 2026-09-12 23:19:40 | ip:127.0.0.1 | 200 | - | 2,689 | 77 | 2499.27 t/s | 89.13 t/s | 2.66s |
-| 12 | 2026-09-12 23:17:19 | ip:127.0.0.1 | 200 | 76 | 55 | 2,622 | 176.78 t/s | 92.17 t/s | 28.77s |
-| 11 | 2026-09-12 23:16:47 | ip:127.0.0.1 | 200 | 49 | 31 | 74 | 97.92 t/s | 90.45 t/s | 1.13s |
-| 10 | 2026-09-12 23:16:28 | ip:127.0.0.1 | 200 | - | 53 | 49 | 107.40 t/s | 88.14 t/s | 1.05s |
-
-
-## Qwen3.8-27B + YaRN 1M context
-
-### cmd
-
-```
-"Qwen3.8-27B-1M":
-    cmd: |
-      pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
-      --port ${PORT}
-      --n-gpu-layers all --device CUDA0
-      --model ${models_dir}/Qwen3.8-27B/Qwen3.8-27B-UD-Q8_K_XL.gguf
-      --mmproj ${models_dir}/Qwen3.8-27B/mmproj-BF16.gguf
-      --mmproj-offload
-      --load-mode auto --flash-attn on --fit off
-      --cache-type-k q8_0 --cache-type-v q8_0
-      --kv-unified
-      --ubatch-size 4096
-      --ctx-size ${ctx_1m}
-      --rope-scaling yarn --rope-scale 4 --yarn-orig-ctx 262144
-      --override-kv qwen35.context_length=int:1000000
-      --cache-ram 12288
-      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/peculiar-ragdoll-v22.5.0.jinja
-      --reasoning on --reasoning-format deepseek
-      --spec-type draft-mtp --spec-draft-n-max 3
-```
-
-### Memory
-
-* GPU Memory: 82598MiB
-* CPU Memory: 49G
-
-### report
-
-| Summary | |
-| --- | --- |
-| Cached | 1,161,297 |
-| Prompt | 231,260 (1227.25 t/s) |
-| Generated | 6,243 (32.81 t/s) |
-| Drafted | 45.7% 3613/7899 |
-
-| ID | Time | Cached | Prompt | Generated | Drafted | Prefill | Decode | Duration |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 14843 | 2026-10-14 17:17:28 | 234,896 | 234 | 150 | 59.9% (97/162) | 105.83 t/s | 36.33 t/s | 7.21s |
-| 14842 | 2026-10-14 17:17:21 | 233,300 | 1,330 | 265 | 60.0% (171/285) | 408.06 t/s | 36.59 t/s | 11.35s |
-| 14841 | 2026-10-14 17:17:09 | 233,029 | 173 | 99 | 79.3% (69/87) | 88.82 t/s | 44.38 t/s | 5.07s |
-| 14840 | 2026-10-14 17:17:04 | 232,854 | 89 | 86 | 72.8% (59/81) | 46.29 t/s | 41.12 t/s | 4.87s |
-| 14839 | 2026-10-14 17:16:59 | 227,218 | 2,046 | 3,591 | 43.4% (2030/4680) | 332.26 t/s | 31.45 t/s | 121.21s |
-| 14838 | 2026-10-14 17:12:20 | - | 227,222 | 2,018 | 45.2% (1162/2571) | 1318.46 t/s | 33.68 t/s | 233.17s |
-| 14837 | 2026-10-14 16:57:57 | - | 166 | 34 | 75.8% (25/33) | 276.57 t/s | 68.06 t/s | 1.11s |
-
-
-## Qwen3.8-Flash-Next + YaRN 1M context, dual-GPU
-
-### cmd
-
-```
-"Qwen3.8-Flash-Next-1M":
-    cmd: |
-      numactl --cpunodebind=1 pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
-      --model ${models_dir}/Qwen3.8-Flash-Next/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
-      --mmproj ${models_dir}/Qwen3.8-Flash-Next/mmproj-F16.gguf
-      --port ${PORT}
-      --n-gpu-layers all --device CUDA0,CUDA1
-      --n-cpu-moe 0
-      --mmproj-offload
-      --load-mode mmap+mlock --flash-attn on --fit off
-      --cache-type-k q8_0 --cache-type-v q8_0
-      --kv-unified
-      --ubatch-size 256
-      --cache-ram 12288
-      --ctx-size ${ctx_1m}
-      --rope-scaling yarn --rope-scale 4 --yarn-orig-ctx 262144
-      --override-kv qwen4exp.context_length=int:1000000
-      --jinja --chat-template-file ${models_dir}/Qwen-chat-templates/froggeric-v22.5.jinja
-      --reasoning on --reasoning-format deepseek
-```
-
-### Memory
-
-* GPU Memory: 46592MiB + 43784MiB
-* CPU Memory: 34G
-
-### report
-
-| Summary | |
-| --- | --- |
-| Cached | 522,309 |
-| Prompt | 87,181 (1173.13 t/s) |
-| Generated | 8,139 (49.65 t/s) |
-| Drafted | - |
-
-| ID | Time | Cached | Prompt | Generated | Drafted | Prefill | Decode | Duration |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 16147 | 2026-10-15 16:02:21 | 91,404 | 1,230 | 2,086 | - | 771.75 t/s | 48.83 t/s | 44.72s |
-| 16146 | 2026-10-15 16:01:35 | 89,891 | 1,707 | 337 | - | 838.77 t/s | 48.76 t/s | 9.31s |
-| 16145 | 2026-10-15 16:01:26 | 87,372 | 755 | 1,765 | - | 685.12 t/s | 48.85 t/s | 37.55s |
-| 16144 | 2026-10-15 15:56:23 | 86,286 | 313 | 774 | - | 439.33 t/s | 49.34 t/s | 16.72s |
-| 16143 | 2026-10-15 15:51:52 | 84,661 | 278 | 1,348 | - | 444.83 t/s | 49.66 t/s | 28.13s |
-| 16142 | 2026-10-15 15:48:29 | 82,695 | 280 | 1,687 | - | 423.36 t/s | 51.17 t/s | 33.98s |
-| 16141 | 2026-10-15 15:46:00 | - | 82,607 | 89 | - | 1231.76 t/s | 51.48 t/s | 69.32s |
-| 16140 | 2026-10-15 15:40:14 | - | 11 | 53 | - | 21.11 t/s | 83.46 t/s | 1.16s |
-
-
 # PRO6000 w/ vLLM and SGLang
-
-## Qwen3.8-27B-vllm
-
-### cmd
-
-```
-"default-vllm": >
-    pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
-    --host 127.0.0.1 --port ${PORT}
-    --enable-per-request-metrics
-    --enable-prompt-tokens-details
-    --per-request-spec-decode-metrics summary
-    --max-num-seqs 8
-    --tensor-parallel-size 1
-    --kv-cache-dtype fp8
-    --enable-prefix-caching
-    --prefix-match-unit 64
-
-${default-vllm}
-      ${models_dir}/Qwen3.8-27B-FP8
-      --max-model-len ${ctx_256k}
-      --reasoning-parser qwen3
-      --mm-encoder-tp-mode data
-      --enable-auto-tool-choice
-      --tool-call-parser qwen3_xml
-      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
-```
-
-### Memory
-
-* GPU Memory: 91414MiB
-* CPU Memory: 3.0G
-
-### report
-
-| Summary | |
-| --- | --- |
-| Cached | 224,512 |
-| Prompt | 455,287 (2171.60 t/s) |
-| Generated | 9,742 (66.38 t/s) |
-| Drafted | 43.6% 5521/12657 |
-
-| ID | Time | Cached | Prompt | Generated | Drafted | Prefill | Decode | Duration |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 8566 | 2026-10-08 17:09:03 | - | 1,316 | 432 | 52.9% (265/501) | 6377.80 t/s | 85.78 t/s | 5.25s |
-| 8565 | 2026-10-08 17:07:58 | - | 68 | 1,379 | 46.4% (802/1728) | 35.30 t/s | 79.52 t/s | 19.28s |
-| 8564 | 2026-10-08 17:06:05 | 224,512 | 229,290 | 3,293 | 39.7% (1790/4506) | 1635.63 t/s | 61.13 t/s | 57.21s |
-| 8563 | 2026-10-08 17:02:36 | - | 224,613 | 4,638 | 45.0% (2664/5922) | 3335.59 t/s | 65.77 t/s | 138.79s |
 
 ## Qwen3.8-27B-vllm + YaRN 1M context
 
-### cmd
-
-```
-${default-vllm}
-      ${models_dir}/Qwen3.8-27B-FP8
-      --max-model-len ${ctx_1m}
-      --hf-overrides '{"text_config":{"rope_parameters":{"mrope_interleaved":true,"mrope_section":[11,11,10],"rope_type":"yarn","rope_theta":10000000,"partial_rotary_factor":0.25,"factor":4.0,"original_max_position_embeddings":262144}}}'
-      --reasoning-parser qwen3
-      --mm-encoder-tp-mode data
-      --enable-auto-tool-choice
-      --tool-call-parser qwen3_xml
-      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
-```
+（cmd 见 `docs/models/Qwen3.8-27B.md` → 「Qwen3.8-27B-vllm-1M」）
 
 ### Memory
 
@@ -306,85 +66,9 @@ ${default-vllm}
 | 14924 | 2026-10-14 18:39:36 | - | 359,808 | 5,033 | 48.4% (2981/6156) | 2360.36 t/s | 62.29 t/s | 234.65s |
 
 
-## Qwen3.8-Flash-Next-vllm
-
-### cmd
-
-```
-pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
-      ${models_dir}/Qwen3.8-Flash-Next-NVFP4
-      --host 127.0.0.1 --port ${PORT}
-      --quantization modelopt
-      --tensor-parallel-size 1
-      --gpu-memory-utilization 0.95
-      --max-model-len ${ctx_256k}
-      --max-num-seqs 4
-      --max-num-batched-tokens 8192
-      --enable-prefix-caching
-      --moe-backend marlin
-      --attention-config.indexer_kv_dtype fp8
-      --no-enable-flashinfer-autotune
-      --enable-per-request-metrics
-      --enable-prompt-tokens-details
-      --per-request-spec-decode-metrics summary
-      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
-      --enable-auto-tool-choice
-      --tool-call-parser qwen3_coder
-      --reasoning-parser qwen3
-```
-
-### Memory
-
-* GPU Memory: 91706MiB
-* CPU Memory: 67G
-
-### report
-
-| Summary | |
-| --- | --- |
-| Cached | 318,400 |
-| Prompt | 619,450 (11559.19 t/s) |
-| Generated | 23,933 (131.24 t/s) |
-| Drafted | 44.0% 13615/30972 |
-
-| ID | Time | Cached | Prompt | Generated | Drafted | Prefill | Decode | Duration |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 8577 | 2026-10-08 17:26:54 | 88,000 | 97,019 | 3,901 | 44.1% (2222/5043) | 11464.38 t/s | 130.95 t/s | 30.78s |
-| 8576 | 2026-10-08 17:26:23 | 67,200 | 90,817 | 2,954 | 44.1% (1682/3813) | 12801.47 t/s | 131.38 t/s | 24.53s |
-| 8575 | 2026-10-08 17:25:58 | 57,600 | 69,656 | 5,157 | 43.4% (2917/6720) | 12282.35 t/s | 130.49 t/s | 40.67s |
-| 8574 | 2026-10-08 17:25:18 | 54,400 | 60,261 | 86 | 76.9% (60/78) | 11772.44 t/s | 181.55 t/s | 1.10s |
-| 8573 | 2026-10-08 17:22:42 | - | 1,643 | 1,442 | 44.8% (827/1845) | 1077.26 t/s | 135.13 t/s | 12.21s |
-| 8572 | 2026-10-08 17:22:03 | 51,200 | 57,363 | 2,855 | 38.8% (1537/3957) | 11593.74 t/s | 123.20 t/s | 23.88s |
-| 8571 | 2026-10-08 17:19:33 | - | 53,563 | 3,761 | 36.4% (1963/5400) | 13099.48 t/s | 118.17 t/s | 36.08s |
-| 8570 | 2026-10-08 17:18:57 | - | 189,128 | 3,777 | 58.5% (2407/4116) | 11338.23 t/s | 154.63 t/s | 41.58s |
-
-
 ## Qwen3.8-Flash-Next-vllm + YaRN 1M context, dual-GPU
 
-### cmd
-
-```
-numactl --cpunodebind=1 pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
-      ${models_dir}/Qwen3.8-Flash-Next-NVFP4
-      --host 127.0.0.1 --port ${PORT}
-      --quantization modelopt
-      --tensor-parallel-size 2
-      --mm-encoder-tp-mode data
-      --gpu-memory-utilization 0.95
-      --max-model-len ${ctx_1m}
-      --hf-overrides '{"text_config":{"rope_parameters":{"mrope_interleaved":true,"mrope_section":[11,11,10],"rope_type":"yarn","rope_theta":10000000,"partial_rotary_factor":0.25,"factor":4.0,"original_max_position_embeddings":262144}}}'
-      --max-num-seqs 8
-      --max-num-batched-tokens 16384
-      --enable-prefix-caching
-      --moe-backend marlin
-      --attention-config.indexer_kv_dtype fp8
-      --no-enable-flashinfer-autotune
-      --enable-per-request-metrics
-      --enable-prompt-tokens-details
-      --enable-auto-tool-choice
-      --tool-call-parser qwen3_coder
-      --reasoning-parser qwen3
-```
+（cmd 见 `docs/models/Qwen3.8-Flash-Next.md` → 「Qwen3.8-Flash-Next-vllm-1M」）
 
 ### Memory
 
@@ -412,65 +96,6 @@ numactl --cpunodebind=1 pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm se
 | 16166 | 2026-10-15 20:28:19 | 749,504 | 751,025 | 350 | - | 3484.95 t/s | 117.64 t/s | 5.17s |
 | 16165 | 2026-10-15 20:28:12 | 749,504 | 750,484 | 370 | - | 2348.77 t/s | 117.57 t/s | 5.27s |
 | 16164 | 2026-10-15 20:28:06 | 749,504 | 749,952 | 498 | - | 867.27 t/s | 117.75 t/s | 6.56s |
-
-
-## Qwen3.8-27B-sglang
-
-### cmd
-
-```
-"default-sglang": >
-    pixi run -m ${env.HOME}/local-llama -e sglang-cuda sglang serve
-    --host 127.0.0.1 --port ${PORT}
-    --enable-metrics
-    --enable-cache-report
-
-${default-sglang}
-      --model-path ${models_dir}/Qwen3.8-27B-FP8
-      --trust-remote-code
-      --attention-backend flashinfer
-      --chunked-prefill-size 2048
-      --kv-cache-dtype fp8_e4m3
-      --mem-fraction-static 0.85
-      --mamba-full-memory-ratio 4.59
-      --mamba-radix-cache-strategy extra_buffer
-      --mamba-ssm-dtype bfloat16
-      --reasoning-parser qwen3
-      --tool-call-parser qwen3_coder
-      --speculative-algorithm NEXTN
-      --speculative-num-steps 3
-      --speculative-eagle-topk 1
-      --speculative-num-draft-tokens 4
-```
-
-### Memory
-
-* GPU Memory: 82422MiB
-* CPU Memory: 4.3G
-
-### report
-
-| Summary | |
-| --- | --- |
-| Duration | 175.65s |
-| Cached | 874,621 |
-| Prompt | 1,020,652 (unknown) |
-| Generated | 10,216 (77.16 t/s) |
-| Drafted | 54.9% 6357/11574 |
-
-| ID | Time | Cached | Prompt | Generated | Drafted | Prefill | Decode | Duration |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 8712 | 2026-10-09 08:48:21 | 149,760 | 150,099 | 129 | 61.5% (83/135) | unknown | 80.52 t/s | 2.39s |
-| 8711 | 2026-10-09 08:48:18 | 147,584 | 149,687 | 287 | 64.6% (190/294) | unknown | 82.31 t/s | 5.03s |
-| 8710 | 2026-10-09 08:48:13 | 147,456 | 147,600 | 91 | 73.8% (62/84) | unknown | 91.46 t/s | 1.67s |
-| 8709 | 2026-10-09 08:48:11 | 145,600 | 147,380 | 137 | 72.1% (93/129) | unknown | 89.66 t/s | 2.90s |
-| 8708 | 2026-10-09 02:08:29 | 145,408 | 145,617 | 1,724 | 58.2% (1097/1884) | unknown | 77.20 t/s | 23.03s |
-| 8707 | 2026-10-09 02:08:05 | - | 139,615 | 5,842 | 56.1% (3665/6531) | unknown | 75.84 t/s | 113.49s |
-| 8706 | 2026-10-09 02:04:35 | 1,088 | 1,194 | 152 | 52.5% (93/177) | unknown | 85.83 t/s | 1.86s |
-| 8705 | 2026-10-09 02:04:13 | - | 1,106 | 452 | 48.7% (269/552) | unknown | 82.33 t/s | 5.71s |
-| 8704 | 2026-10-09 02:00:15 | - | 323 | 853 | 35.6% (440/1236) | unknown | unknown | 12.43s |
-| 8703 | 2026-10-09 01:36:54 | 137,728 | 138,031 | 549 | 66.1% (365/552) | unknown | unknown | 7.14s |
-
 
 
 # T14p
