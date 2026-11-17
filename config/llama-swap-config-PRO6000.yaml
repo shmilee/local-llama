@@ -62,7 +62,7 @@ logToStdout: "both"
 #   - total size is capped by captureBuffer; the oldest captures are deleted
 #   - keep or move the two files together
 store:
-  path: ${env.LOCAL_LLAMA_HOME}/activity-PRO6000.sqlite
+  path: ${env.LOCAL_LLAMA_HOME}/activities/activity-PRO6000.sqlite
 #   persistCaptures: true
 
 # metricsMaxInMemory: maximum number of metrics to keep in memory

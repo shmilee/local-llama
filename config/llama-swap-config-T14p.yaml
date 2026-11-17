@@ -62,7 +62,7 @@ logToStdout: "both"
 #   - total size is capped by captureBuffer; the oldest captures are deleted
 #   - keep or move the two files together
 store:
-  path: /media/Data/huggingface-models/activity-T14p.sqlite
+  path: ${env.LOCAL_LLAMA_HOME}/activities/activity-T14p.sqlite
 #   persistCaptures: true
 
 # metricsMaxInMemory: maximum number of metrics to keep in memory
