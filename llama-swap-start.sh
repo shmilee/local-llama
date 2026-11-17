@@ -23,6 +23,8 @@ usage() {
 
 CONFIG_NAME=""
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# 配置中 ${env.LOCAL_LLAMA_HOME} 宏的 repo 根目录
+export LOCAL_LLAMA_HOME="$SCRIPT_DIR"
 LOCAL_ENV="$SCRIPT_DIR/local.env"
 if [ -f "$LOCAL_ENV" ]; then
     set -a

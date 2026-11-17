@@ -62,7 +62,7 @@ logToStdout: "both"
 #   - total size is capped by captureBuffer; the oldest captures are deleted
 #   - keep or move the two files together
 store:
-  path: ${env.HOME}/local-llama/activity-PRO6000.sqlite
+  path: ${env.LOCAL_LLAMA_HOME}/activity-PRO6000.sqlite
 #   persistCaptures: true
 
 # metricsMaxInMemory: maximum number of metrics to keep in memory
@@ -212,7 +212,7 @@ macros:
   #    CUDA_VISIBLE_DEVICES=7, 环境变量控制可见卡，防止 CLIP 用到 CUDA0。
   #    每个模型可将 CUDA? 映射为 CUDA0。
   "default-llama": >
-    pixi run -m ${env.HOME}/local-llama -e llamacpp-cuda llama-server
+    pixi run -m ${env.LOCAL_LLAMA_HOME} -e llamacpp-cuda llama-server
     --port ${PORT}
     --n-gpu-layers all --device CUDA0
     --mmproj-offload
@@ -235,7 +235,7 @@ macros:
   #    越小，前缀匹配越精细，缓存命中率越高，但元数据开销越大。
   #    前缀缓存对 Mamba 混合模型的行为边界（Qwen3.8-27B）见 docs/vllm.md。
   "default-vllm": >
-    pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
+    pixi run -m ${env.LOCAL_LLAMA_HOME} -e vllm-cuda vllm serve
     --host 127.0.0.1 --port ${PORT}
     --enable-per-request-metrics
     --enable-prompt-tokens-details
@@ -252,16 +252,16 @@ macros:
   # JSON 内路径全部相对仓库根目录（宏用 env -C 钉住工作目录）；
   # pack 在 strata-packs/dsv41-iq2xxs（生成方法见 docs/strata.md）
   "default-strata-ds41": >
-    env -C ${env.HOME}/local-llama
-    pixi run -m ${env.HOME}/local-llama -e strata-cuda strata serve
+    env -C ${env.LOCAL_LLAMA_HOME}
+    pixi run -m ${env.LOCAL_LLAMA_HOME} -e strata-cuda strata serve
     --config config/strata-ds41.json
 
   # Strata Qwen3.8-Flash-Next（同环境，run config config/strata-qwen.json，
   # 相对路径机制同上；pack 在 strata-packs/qwen38fn-iq3xxs；
   # GPU 4 单卡，1M 上下文；PLE 表 mlock 进内存须配 --ple-io ram）
   "default-strata-qwen": >
-    env -C ${env.HOME}/local-llama
-    pixi run -m ${env.HOME}/local-llama -e strata-cuda strata serve
+    env -C ${env.LOCAL_LLAMA_HOME}
+    pixi run -m ${env.LOCAL_LLAMA_HOME} -e strata-cuda strata serve
     --config config/strata-qwen.json
 
   # Example of environment variable macros
@@ -583,7 +583,7 @@ models:
   "Qwen3.8-Flash-Next-vllm-1M":
     useModelName: "${models_dir}/Qwen3.8-Flash-Next-NVFP4"
     cmd: |
-      numactl --cpunodebind=1 pixi run -m ${env.HOME}/local-llama -e vllm-cuda vllm serve
+      numactl --cpunodebind=1 pixi run -m ${env.LOCAL_LLAMA_HOME} -e vllm-cuda vllm serve
       ${models_dir}/Qwen3.8-Flash-Next-NVFP4
       --host 127.0.0.1 --port ${PORT}
       --quantization modelopt

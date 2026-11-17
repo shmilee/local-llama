@@ -534,7 +534,7 @@ models:
   # - 权重: docs/models.md「7. Z-Image, 文生图」下载记录
   "Z-Image-Turbo":
     cmd: |
-      taskset -c 0-7 pixi run -m ${env.HOME}/local-llama -e sdcpp-vulkan sd-server
+      taskset -c 0-7 pixi run -m ${env.LOCAL_LLAMA_HOME} -e sdcpp-vulkan sd-server
       --listen-ip 127.0.0.1 --listen-port ${PORT}
       --diffusion-model ${models_dir}/Z-Image-Turbo/z-image-turbo-Q4_K_M.gguf
       --vae ${models_dir}/Z-Image-Turbo/ae.safetensors
