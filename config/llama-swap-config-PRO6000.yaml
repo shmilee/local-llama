@@ -263,6 +263,8 @@ macros:
   "ctx_64k": 65536
   "ctx_128k": 131072
   "ctx_256k": 262144
+  "ctx_512k": 524288
+  "ctx_768k": 786432
   "ctx_1m": 1000000
 
 # apiKeys: require an API key when making requests to inference endpoints
