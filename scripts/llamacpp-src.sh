@@ -23,7 +23,13 @@ if [ ! -f "llama-$LLAMACPP_VERSION-ui.tar.gz" ]; then
     curl -fL --retry 3 -o "llama-$LLAMACPP_VERSION-ui.tar.gz" \
         "https://github.com/ggml-org/llama.cpp/releases/download/$LLAMACPP_VERSION/llama-$LLAMACPP_VERSION-ui.tar.gz"
 fi
-UI_DIST_DIR="$SRC_DIR/tools/ui/dist"
+# UI 预置资产目录：b12500 起 UI 源码从 tools/ui/ 移到 ui/apps/chat/
+# （ui-assets.cmake 首选 <UI_SOURCE_DIR>/dist 作为预构建资产，找不到才走 npm/HF）
+if [ -d "$SRC_DIR/ui/apps/chat" ]; then
+    UI_DIST_DIR="$SRC_DIR/ui/apps/chat/dist"
+else
+    UI_DIST_DIR="$SRC_DIR/tools/ui/dist"
+fi
 mkdir -p "$UI_DIST_DIR"
 if [ ! -f "$UI_DIST_DIR/index.html" ]; then
     tar -xzf "llama-$LLAMACPP_VERSION-ui.tar.gz" -C "$UI_DIST_DIR" --strip-components=1

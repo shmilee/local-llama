@@ -24,7 +24,8 @@ case "$BACKEND" in
         # （Blackwell 上为 sm_120a，需 CUDA >=12.8）
         BACKEND_FLAGS=(
             -DGGML_CUDA=ON
-            -DGGML_CUDA_FA_ALL_QUANTS=ON
+            # b12500 起 GGML_CUDA_FA_ALL_QUANTS 弃用，all 等价且含新增 f8_e4m3 组合
+            -DGGML_CUDA_FA_QUANTS=all
         )
         ;;
     vulkan)
@@ -75,7 +76,7 @@ cmake -B "$BUILD_DIR" \
     -DGGML_BUILD_EXAMPLES=OFF \
     -DGGML_BUILD_TESTS=OFF \
     -DLLAMA_BUILD_NUMBER="${LLAMACPP_VERSION#b}" \
-    -Wno-dev \
+    -Wno-author \
     "${BACKEND_FLAGS[@]}"
 cmake --build "$BUILD_DIR" --config Release -j
 cmake --install "$BUILD_DIR"
