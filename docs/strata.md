@@ -29,8 +29,16 @@ pixi run -e strata-cuda strata-verify  # 校验三个二进制 + GPU
 
 ### 1. 准备 pack（约 1 分钟，产物 1.5G）
 
-IQ3_XXS 这类 i-quant 走 **native pack**：专家权重不复制，运行时直接读
-GGUF（所以不加 `--experts-bin`）。
+一键脚本（自动找 Strata 源码 / pinned gguf-py / 模型文件，校验产物完整性，
+幂等）：
+
+```
+pixi run -e strata-cuda strata-pack        # qwen + ds41 都备
+pixi run -e strata-cuda strata-pack qwen   # 只备 qwen
+```
+
+手工（等价，排障参考）：IQ3_XXS 这类 i-quant 走 **native pack**：专家权重
+不复制，运行时直接读 GGUF（所以不加 `--experts-bin`）。
 
 ```
 # gguf-py 需单独取（setup.py pin 的 llama.cpp commit 的 gguf-py/ 目录）
@@ -86,9 +94,14 @@ print(','.join(map(str, tk.encode('你好！请用一句话介绍一下你自己
 
 ### 1. 准备 pack（几分钟，产物几 MB）
 
-`tools/dsv41/pack_gguf.py`。**`--shards`/`--engram`/`--engram-meta` 全部用
-绝对路径**——`--engram` 传相对路径会按 CWD 解析失败，症状是静默报
-`5 of the 6 shards are here` 然后 exit 1（不解释原因）。
+一键脚本：`pixi run -e strata-cuda strata-pack ds41`（自动定位模型目录，
+of-00006 布局的 5 分片 + Engram + 可选 dspark 都按绝对路径传入；模型目录里
+有 `dspark-*.gguf` 时自动带 `--dspark-gguf --dspark-noise-token 128799
+--dspark-markov-rank 256`）。
+
+手工（等价，排障参考）：`tools/dsv41/pack_gguf.py`。**`--shards`/`--engram`/
+`--engram-meta` 全部用绝对路径**——`--engram` 传相对路径会按 CWD 解析失败，
+症状是静默报 `5 of the 6 shards are here` 然后 exit 1（不解释原因）。
 
 六分片布局（`of-00006`，本机这套）：shard 1 是 5.6M 纯元数据（含全部
 `deepseek41.ple.*` 参数，兼作 `--engram-meta`），shard 2-5 是模型，
@@ -308,6 +321,31 @@ prefill 随 prompt 长度（生产实例，单卡 96G，`--ple-io ram`，全部�
   多 ~3.5GB 常驻，prefill 无改善。**默认（快）推荐**；内存紧张时用
   `--mmap-experts`。
 
+## DS4.1 引擎选择（2026-11-18：Strata 冻结版 / Maya / PolyStrata）
+
+上游 0.2.14 移除 DeepSeek 后，能跑 DeepSeek-V4.1-Flash-1017 的引擎只剩三类，
+**模型文件格式互不通用**：
+
+| 方案 | 引擎 | 接受的模型文件 | 本机状态 |
+| --- | --- | --- | --- |
+| **Strata v0.2.4.2（现用）** | `strata-dsv41` 0.1.49.2（代码即 Maya 的 `maya-ds4` 移植版） | ISTA-DASLab **GSQ-RCO** GGUF：IQ2_XXS 核心 136GB + Engram IQ4_NL 110GB + DSpark 7.9GB | ✅ 已有文件；prefill 2048 tok/s @512k |
+| Project Maya（`mw00/project-maya`） | `maya-ds4`（v1.1.67） | **Maya 自家** quant（Maya-S 340GB / Maya-XS 277GB，Engram 是 Q6_K）、**Unsloth UD-IQ1_M / UD-IQ3_S / UD-Q8_K_XL**（301/424/467GB）、EXL3 2.25/2.9/3.5bpw、abliterated GGUF；**不含 GSQ-RCO**（仓库内无任何 "GSQ" 引用） | ❌ 需重下 277-467GB |
+| PolyStrata（`simplexai-labs/PolyStrata`） | 自研 `strata-poly` 引擎 | 只有 **DeepSeek V4 Flash（0731，91GB，Unsloth UD-IQ2_XXS）**——不是 V4.1-Flash-1017；QFN 仍用 Strata 原引擎 | ❌ 不是同一代模型 |
+
+**决定：继续用 Strata v0.2.4.2 的 `strata-dsv41`。**
+
+- 它就是 Maya 引擎的移植版（二进制 usage 里写着 `maya-ds4`），0.1.49.2
+  恰好是长上下文 prefill 未回归的快照；
+- 现有 GSQ-RCO 文件直接可用，零下载；Maya 要换整套 277-467GB 的文件，
+  且其公开机测是单卡 96G + 61-92GB RAM 的配置（如 512K prefill 3810、
+  1M decode 39.6），与本机双卡 + 251GB RAM 的配置不可直接比较，没有证据
+  表明在本机会更快；
+- PolyStrata 的 DeepSeek 是更早的 V4-Flash-0731，不适用；它的 QFN 用的
+  仍是 Strata 引擎，也没有额外收益。
+- 将来若要跟进新 DS4.1 特性（新 prompt 路径、新 drafter），迁移目标是
+  **Maya**（同引擎血脉、flag 兼容 `--experts`/`--ssd-cache` 等），但需按
+  它的 quant 列表重新下载模型。
+
 ## KV cache 量化（QFN 可调，DS4.1 不适用）
 
 `strata-engine`（QFN）支持 `--kv fp16|int8|q4_0|k8v4`；`strata-dsv41`
@@ -420,4 +458,5 @@ fp16 为基准）：**int8 与 fp16 基本无法区分**（top-1 一致 92-98%�
    的组件流会从 feed 下预编译引擎——本机 GitHub 不可达，用不了那条路，
    以本地源码构建为准。
 8. **清理**：pack 目录（仓库根 `strata-packs/`，qwen 1.5G / dsv41 几 MB，
-   已入 .gitignore）用完可删，重生成很快；模型文件永远只读。
+   已入 .gitignore）用完可删，重生成很快（`pixi run -e strata-cuda strata-pack`）；
+   模型文件永远只读。

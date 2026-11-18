@@ -303,6 +303,12 @@ strata-src = "bash $PIXI_PROJECT_ROOT/scripts/strata-src.sh"
 # 打印 strata-engine 绝对路径（strata-build 安装到 $CONDA_PREFIX/bin）
 strata-path = "which strata-engine"
 
+# 准备 run pack（strata-packs/，模型文件只读；缺 tokenizer/vocab.json 时
+# 终端拒绝启动）。all=两个都备（默认）；幂等，已完整跳过，--force 重建
+strata-pack = "bash $PIXI_PROJECT_ROOT/scripts/strata-pack.sh"
+strata-pack-qwen = "bash $PIXI_PROJECT_ROOT/scripts/strata-pack.sh qwen"
+strata-pack-ds41 = "bash $PIXI_PROJECT_ROOT/scripts/strata-pack.sh ds41"
+
 # 编译 + 安装（引擎/终端安装到 $CONDA_PREFIX，RPATH 相对定位 lib）
 # 后端由 $STRATA_BACKEND 自动区分（各 backend feature 单独定义）
 [feature.strata-base.tasks.strata-build]
