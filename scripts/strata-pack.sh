@@ -194,6 +194,22 @@ pack_ds41() {
         || die "模型目录 $d 找不到 Engram gguf（DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf）"
     [ "$engram" != "$d/$(basename "$engram")" ] && \
         echo "  note: Engram 在模型目录外：$engram（tensors.txt 用相对路径引用）"
+    # of-00006 布局里 Engram 就是 split 的第 6 个分片（文件声明 split.count=6、
+    # split.no=5）：--shards 必须把 6 个文件全列上，只给 5 个会撞上不解释原因的
+    # "5 of the 6 shards are here"（split 检查，与 --engram 相对路径无关）
+    local split_count sixth
+    split_count="$( "${PY[@]}" -c '
+import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location("pg", sys.argv[1])
+pg = importlib.util.module_from_spec(spec); spec.loader.exec_module(pg)
+print(int(pg.Gguf(pathlib.Path(sys.argv[2])).kv.get("split.count", 1)))
+' "$SRC_DIR/tools/dsv41/pack_gguf.py" "${shards[0]}")" || die "读 split.count 失败：${shards[0]}"
+    [ "$split_count" = "6" ] \
+        || die "分片文件名是 of-00006 但 split.count=$split_count（布局不符，见 docs/strata.md）"
+    sixth="$d/DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00006-of-00006.gguf"
+    [ -f "$sixth" ] || sixth="$engram"
+    [ -f "$sixth" ] || die "split 第 6 个文件缺失（00006-of-00006 符号链接或 Engram 文件）"
+    shards+=("$sixth")
     # DSpark drafter（可选；IST-DAS 量化需要 noise token / markov rank）
     dspark="$(find "$d" -maxdepth 1 \( -type f -o -type l \) -name 'dspark-*.gguf' 2>/dev/null | head -1 || true)"
 
@@ -202,7 +218,7 @@ pack_ds41() {
                 --engram-meta "${shards[0]}" --out "$DS41_PACK")
     [ -n "$dspark" ] && args+=(--dspark-gguf "$dspark" --dspark-noise-token 128799 --dspark-markov-rank 256)
     echo "dsv41: pack_gguf.py（只写 header/表，产物几 MB）"
-    echo "  目录:   $d（shards 00001-00005，00001 兼 engram-meta）"
+    echo "  目录:   $d（shards 00001-00006，00001 兼 engram-meta；of-00006 布局 Engram 是第 6 分片，必须列入）"
     echo "  engram: $engram"
     echo "  dspark: ${dspark:-无（--dspark auto 将不启用，decode 稍慢）}"
     echo "  输出:   $DS41_PACK"

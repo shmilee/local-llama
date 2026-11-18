@@ -100,22 +100,30 @@ of-00006 布局的 5 分片 + Engram + 可选 dspark 都按绝对路径传入；
 --dspark-markov-rank 256`）。
 
 手工（等价，排障参考）：`tools/dsv41/pack_gguf.py`。**`--shards`/`--engram`/
-`--engram-meta` 全部用绝对路径**——`--engram` 传相对路径会按 CWD 解析失败，
-症状是静默报 `5 of the 6 shards are here` 然后 exit 1（不解释原因）。
+`--engram-meta` 全部用绝对路径**。
 
 六分片布局（`of-00006`，本机这套）：shard 1 是 5.6M 纯元数据（含全部
 `deepseek41.ple.*` 参数，兼作 `--engram-meta`），shard 2-5 是模型，
 shard 6（symlink）是 Engram。四分片布局则 `--engram-meta` 要另下 unsloth
 的 5.8M 元数据分片。
 
+**坑（2026-11-19 实测定位）**：of-00006 布局里 6 个文件都声明
+`split.count=6`（Engram 就是 split 的第 6 分片，`split.no=5`），所以
+`--shards` 必须把 **6 个文件全列上**（00006 用 symlink 名）。只列 5 个会
+撞 split 检查：静默报 `5 of the 6 shards are here` 然后 exit 1，不解释
+原因（此前文档误归因为 `--engram` 相对路径——相对路径的报错是另一种：
+`no .gguf files (--engram: ...)`）。
+
 ```
 python tools/dsv41/pack_gguf.py \
   --model <模型目录> \
-  --shards <绝对路径 00001> <00002> <00003> <00004> <00005> \
+  --shards <绝对路径 00001> <00002> <00003> <00004> <00005> <00006> \
   --engram <绝对路径 DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf> \
   --engram-meta <绝对路径 00001> \
   --out <pack_dir>
 ```
+（`--engram`/`--engram-meta` 在 of-00006 布局下是冗余但无害的：Engram
+张量已从 split 第 6 分片读到，`--engram` 的补填集为空；四分片布局仍必需）
 
 ### 2. 跑（官方冒烟脚本）
 
