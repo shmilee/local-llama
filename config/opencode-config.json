@@ -14,7 +14,7 @@
       },
       "models": {
         "Qwen3.8-27B": {
-          "name": "Qwen3.8-27B",
+          "name": "Qwen-27B-256k",
           "limit": {
             "context": 262144,
             "input": 217777,
@@ -25,7 +25,7 @@
           }
         },
         "Qwen3.8-27B-vllm-1M": {
-          "name": "Qwen3.8-27B, 1M",
+          "name": "Qwen-27B-1M",
           "limit": {
             "context": 1000000,
             "input": 888888,
@@ -35,20 +35,32 @@
             "reasoning": { "supported": true }
           }
         },
-        "Qwen3.8-Flash-Next": {
-          "name": "Qwen3.8-Flash-Next",
+        "Qwen3.8-Flash-Next-vllm-1M": {
+          "name": "Qwen-Flash-Next-1M",
           "disabled": true,
           "limit": {
-            "context": 262144,
-            "input": 217777,
+            "context": 1000000,
+            "input": 888888,
+            "output": 65536
+          },
+          "capabilities": {
+            "reasoning": { "supported": true }
+          }
+        },
+        "DeepSeek-V4.1-Flash": {
+          "name": "DeepSeek-V4.1-Flash-1017",
+          "disabled": true,
+          "limit": {
+            "context": 524288,
+            "input": 262144,
             "output": 32768
           },
           "capabilities": {
             "reasoning": { "supported": true }
           }
         },
-        "Qwen3.8-Flash-Next-vllm-1M": {
-          "name": "Qwen3.8-Flash-Next, 1M",
+        "Qwen3.8-Flash-Next-Strata": {
+          "name": "Qwen-Flash-Next-IQ3",
           "disabled": true,
           "limit": {
             "context": 1000000,
