@@ -11,6 +11,6 @@
   "lib_dirs": [],
   "port": 0,
   "engine_ready_s": 3600,
-  "gpu": [5, 6],
+  "gpu": [4, 6],
   "gpus_asked": true
 }
