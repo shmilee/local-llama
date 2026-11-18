@@ -232,3 +232,41 @@ prompt ids 生成：`tools/strata_tokenizer.py` 的 Tokenizer（确定性语料�
   为通过线），改回 `STRATA_VERSION`
 - [ ] （可选）bisect 0.1.50-0.1.59 定位具体 commit（每版 ~10 分钟构建，
   6-7 个版本 ≈ 1.5h）
+
+### 2026-11-18 复检：Strata 0.2.15（源码构建引擎 0.1.61）
+
+- **QFN（flash_next）长上下文 prefill 没有回归，反而更快**。同一 token
+  文件、同一张卡（GPU 6）、引擎直跑 131k 上下文：
+  - 0.1.49.2（v0.2.4.2）：5,068 tok/s（16 chunk × 8k，25.9s）
+  - 0.1.61（v0.2.15 源码构建）：**5,960 tok/s**（4 chunk × 32k，22.0s）
+  - 即 **+17.6%**；0.2.14 起"prompt 走 Strata 自有 MMQ 内核"的新路径
+    在 QFN 上没有性能退化（官方打包引擎 0.1.60，源码构建为 0.1.61）。
+- **dsv41（DeepSeek-V4.1）未修复**：v0.2.15 源码中已无 dsv41 引擎
+  （无 `src/dsv41`、无 `STRATA_BUILD_DSV41`），官方 DeepSeek 引擎包
+  仍停在 **0.1.59**（v0.2.13 的同一个二进制，即 10× 回归本体）。
+  复检时上游 #5894 仍 open（无回复，最后更新 2026-11-13）；2026-11-18
+  已按 `not planned` 关闭，见下一节。
+- **结论：继续 pin v0.2.4.2**。QFN 侧的 +17% prefill 不值得为此做
+  「主引擎 0.2.15 + dsv41 0.2.4.2」的双版本混合（终端/引擎协议未验证）；
+  等上游发布带新 prompt 路径的 dsv41 引擎后一次性整体升级并复测
+  （131k/512k prefill ≥ 2000 tok/s 通过线）。
+
+### 2026-11-18 上游政策：DeepSeek 引擎被移除（#6072 / #6048）
+
+- 0.2.14 起 Strata **移除 DeepSeek 支持**（提交 `ac306afb`）：dsv41 引擎
+  原本是从 Project Maya 移植的（`third_party/project-maya`，MIT）；围绕
+  多 MoE 架构支持的分歧（上游 #310）+ 移植代码的维护成本，最终停用。
+  app/Control 层把 DeepSeek 模型标成 "no longer supported"，且该状态记在
+  Control 的 `active.json` 里，所以只回退引擎（0.1.59）也恢复不了。
+- **对本仓库无影响**：这里是源码构建的 v0.2.4.2（不经过 app/Control/feed），
+  `strata-dsv41` 二进制照常工作。但也意味着 **0.1.59 的 dsv41 prefill
+  回归不会由上游修复**（引擎已退役）。
+- **#5894 已关闭**（2026-11-18，理由 `not planned`，附说明评论：引擎在
+  0.2.14/0.2.15 被移除、无上游引擎可修，若将来恢复 DeepSeek 支持可重开）。
+- 后续选项（若要兼得 QFN 新内核与 DS4.1）：
+  a) 继续 pin v0.2.4.2（当前最优 DS4.1：2048 tok/s @512k）；
+  b) 双版本混合：主引擎用 0.2.15（QFN +17% prefill）+ dsv41 用 0.2.4.2
+     二进制（源码构建天然可行，终端/引擎协议需先验证）；
+  c) 换生态：Project Maya（`mw00/project-maya`）、PolyStrata
+     （`simplexai-labs/PolyStrata`）、`fragtion/strata-dsv41`。它们的内核
+     基座更旧（PolyStrata 是 0.1.45 系），QFN 侧会退回旧性能，不建议。
