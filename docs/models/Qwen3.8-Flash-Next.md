@@ -2,7 +2,7 @@
 
 |      |      |
 | ---- | ---- |
-| 状态 | 主力（规划）`Qwen3.8-Flash-Next-vllm-1M`；实验中 `Qwen3.8-Flash-Next-Strata`（2026-11-13 上线，视觉 2026-11-15 启用）；4 条目已归档（2026-11-16） |
+| 状态 | 主力（规划）`qwen3.8-flash-next-fp4-1m`；实验中 `qwen3.8-flash-next-iq3-1m`（2026-11-13 上线，视觉 2026-11-15 启用）；4 条目已归档（2026-11-16） |
 | 权重 | UD-IQ4_XS 3 分片 + mmproj-F16（llama.cpp）；NVFP4 124G（vLLM）/ 133G（SGLang）（nvidia ModelOpt 混合精度）；GSQ-RCO IQ3_XXS 71G + mmproj-BF16（strata）。下载记录见 `docs/models.md`「2. MoE, Qwen3.8 Flash Next」 |
 | 平台 | PRO6000（8×96G）；单卡条目 GPU 6，1M 双卡条目 GPU 4,6 |
 | 测试版本 | vLLM 0.33.0、SGLang 0.5.23、llama.cpp b12282、strata v0.2.4.2 / 引擎 0.1.49.2（pin 理由见 `strata-prefill-regression.md`） |
@@ -15,8 +15,8 @@
 
 | 条目 | 后端 | ctx | prefill | decode | MTP | 使用量（9-12 → 11-13） | 状态 |
 | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| Qwen3.8-Flash-Next-vllm-1M | vLLM NVFP4 + YaRN（TP2） | 1M | 12230 t/s（708K 冷） | 114~118 t/s | 关 | 27 次（10-15） | 主力（规划） |
-| Qwen3.8-Flash-Next-Strata | strata flash_next | 1M | 4349 t/s（1M） | 161.5 t/s | — | 0 次（11-13 上线） | 实验中 |
+| qwen3.8-flash-next-fp4-1m | vLLM NVFP4 + YaRN（TP2） | 1M | 12230 t/s（708K 冷） | 114~118 t/s | 关 | 27 次（10-15） | 主力（规划） |
+| qwen3.8-flash-next-iq3-1m | strata flash_next | 1M | 4349 t/s（1M） | 161.5 t/s | — | 0 次（11-13 上线） | 实验中 |
 | Qwen3.8-Flash-Next | llama.cpp UD-IQ4_XS | 256k | 1147~2499 t/s | ~90 t/s | 关 | 199 次（最后 10-23） | 已归档 2026-11-16 |
 | Qwen3.8-Flash-Next-vllm | vLLM NVFP4 | 256k | 11464~13099 t/s | 118~181 t/s | 44.0% | 9 次（10-08） | 已归档 2026-11-16 |
 | Qwen3.8-Flash-Next-1M | llama.cpp UD-IQ4_XS + YaRN（双卡） | 1M | 1232 t/s（82K 冷） | 48~51 t/s | 关 | 8 次（10-15） | 已归档 2026-11-16 |
@@ -24,7 +24,7 @@
 
 使用量来源：`activity-PRO6000.sqlite`（2026-11-13 备份）。
 
-## Qwen3.8-Flash-Next-vllm-1M（主力，规划）
+## qwen3.8-flash-next-fp4-1m（主力，规划）
 
 ### cmd（当前快照 2026-11-17；运行以 `config/llama-swap-config-PRO6000.yaml` 为准）
 
@@ -67,9 +67,9 @@ decode 116.90 t/s（行内 114~118）。
 * prefill 峰值 12.2K t/s + decode 117 t/s + TP2 下 1M 并发 3.82×，
   家族 1M 路线主力。
 * 短板：MTP 必须关（TP2 无投机解码加速）；占 4,6 双卡、每卡 ~95G，
-  与 `DeepSeek-V4.1-Flash` 冲突，须手动切换。
+  与 DeepSeek-V4.1-Flash / IQ3 条目同组 group2（共占 4,6 卡系），自动互斥切换。
 
-## Qwen3.8-Flash-Next-Strata（实验中）
+## qwen3.8-flash-next-iq3-1m（实验中）
 
 ### cmd（当前快照 2026-11-17；运行以 config 为准）
 
@@ -337,9 +337,9 @@ watchdog、precompile）见 `sglang.md`「Flash-Next 单卡（NVFP4 + PLE）要�
 
 ## 相关
 
-* 配置：`config/llama-swap-config-PRO6000.yaml` → `Qwen3.8-Flash-Next-vllm-1M`（group2）、`Qwen3.8-Flash-Next-Strata`（不进组）
+* 配置：`config/llama-swap-config-PRO6000.yaml` → `qwen3.8-flash-next-fp4-1m`、`qwen3.8-flash-next-iq3-1m`、`deepseek-v4.1-flash-iq2-512k`（同在 group2）
 * 后端文档：`vllm.md`「Qwen3.8-Flash-Next 单卡（NVFP4，96G）」+「长上下文（YaRN 1M，双卡 TP2）」；
   `sglang.md`「Flash-Next 单卡（NVFP4 + PLE）要点」；
   `llama.cpp.md`「Qwen3.8-Flash-Next 1M（双卡层切分）」；
   `strata.md`「Qwen3.8-Flash-Next」+「图像（视觉）」
-* 同卡模型：`DeepSeek-V4.1-Flash`（GPU 4,6，手动切换）
+* 同卡模型：DeepSeek-V4.1-Flash（同组 group2，自动互斥切换）

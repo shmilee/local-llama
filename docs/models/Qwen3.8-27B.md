@@ -2,7 +2,7 @@
 
 |      |      |
 | ---- | ---- |
-| 状态 | 主力 `Qwen3.8-27B-vllm-1M`（2026-10-14 起）；备用 `Qwen3.8-27B`（llama.cpp）；3 条目已归档（2026-11-16） |
+| 状态 | 主力 `qwen3.8-27b-fp8-1m`（2026-10-14 起）；备用 `qwen3.8-27b-q8-256k`（llama.cpp）；3 条目已归档（2026-11-16） |
 | 权重 | `Qwen3.8-27B-UD-Q8_K_XL.gguf` + `mmproj-BF16.gguf`（llama.cpp）；`Qwen3.8-27B-FP8` 30.9G（vLLM/SGLang）。下载记录见 `docs/models.md`「1. Dense, Qwen3.8」 |
 | 平台 | PRO6000（8×96G），GPU 2 |
 | 测试版本 | vLLM 0.33.0、SGLang 0.5.23、llama.cpp b12282（当前，pin 与构建见 `pixi-environments.md` / `llama.cpp.md`） |
@@ -16,15 +16,15 @@
 
 | 条目 | 后端 | ctx | prefill | decode | MTP 接受率 | 使用量（9-12 → 11-13） | 状态 |
 | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| Qwen3.8-27B-vllm-1M | vLLM FP8 + YaRN | 1M | 2360 t/s（359K 冷） | 62~95 t/s | 56.9% | 45,915 次 | 主力 |
-| Qwen3.8-27B | llama.cpp Q8 | 256k | 739~2016 t/s | ~85 t/s | 67.8% | 14,564 次 | 备用 |
+| qwen3.8-27b-fp8-1m | vLLM FP8 + YaRN | 1M | 2360 t/s（359K 冷） | 62~95 t/s | 56.9% | 45,915 次 | 主力 |
+| qwen3.8-27b-q8-256k | llama.cpp Q8 | 256k | 739~2016 t/s | ~85 t/s | 67.8% | 14,564 次 | 备用 |
 | Qwen3.8-27B-1M | llama.cpp Q8 + YaRN | 1M | 1318 t/s（227K 冷） | 33 t/s | 45.7% | 86 次（10-14 单日） | 已归档 2026-11-16 |
 | Qwen3.8-27B-vllm | vLLM FP8 | 256k | 3336 t/s（224K） | 66 t/s | 43.6% | 6 次（10-08） | 已归档 2026-11-16 |
 | Qwen3.8-27B-sglang | SGLang FP8 | 256k | 未上报 | 75~91 t/s | 54.9% | 135 次（10-08 → 09） | 已归档 2026-11-16 |
 
 使用量来源：`activity-PRO6000.sqlite`（2026-11-13 备份）。
 
-## Qwen3.8-27B-vllm-1M（主力）
+## qwen3.8-27b-fp8-1m（主力）
 
 ### cmd（当前快照 2026-11-17；运行以 `config/llama-swap-config-PRO6000.yaml` 为准）
 
@@ -64,7 +64,7 @@ YaRN factor 4 静态生效（短 prompt 同样受影响）。
 * 短板：YaRN 静态生效、官方警告波及短文本质量；单卡 96G 接近打满，
   大并发无余量。
 
-## Qwen3.8-27B（备用，llama.cpp）
+## qwen3.8-27b-q8-256k（备用，llama.cpp）
 
 ### cmd（当前快照 2026-11-17；运行以 config 为准）
 
@@ -299,7 +299,7 @@ Prefill 列 unknown（SGLang OpenAI 响应无逐请求计时字段，见 `sglang
 
 ## 相关
 
-* 配置：`config/llama-swap-config-PRO6000.yaml` → `Qwen3.8-27B`、`Qwen3.8-27B-vllm-1M`
+* 配置：`config/llama-swap-config-PRO6000.yaml` → `qwen3.8-27b-q8-256k`、`qwen3.8-27b-fp8-1m`
 * 后端文档：`vllm.md`「启动参数（Qwen3.8-27B-FP8…）」+「长上下文（YaRN 1M）」；
   `sglang.md`「启动参数（Qwen3.8-27B-FP8…）」；`llama.cpp.md`「长上下文（YaRN 1M）」
 * issue：`issue-opencode-long-context-timeout.md`

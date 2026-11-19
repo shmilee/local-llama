@@ -13,8 +13,8 @@
         "chunkTimeout": 1200000
       },
       "models": {
-        "Qwen3.8-27B": {
-          "name": "Qwen-27B-256k",
+        "qwen3.8-27b-q8-256k": {
+          "name": "Qwen3.8-27B · Q8 · 256k",
           "limit": {
             "context": 262144,
             "input": 217777,
@@ -24,8 +24,8 @@
             "reasoning": { "supported": true }
           }
         },
-        "Qwen3.8-27B-vllm-1M": {
-          "name": "Qwen-27B-1M",
+        "qwen3.8-27b-fp8-1m": {
+          "name": "Qwen3.8-27B · FP8 · 1M",
           "limit": {
             "context": 1000000,
             "input": 888888,
@@ -35,9 +35,8 @@
             "reasoning": { "supported": true }
           }
         },
-        "Qwen3.8-Flash-Next-vllm-1M": {
-          "name": "Qwen-Flash-Next-1M",
-          "disabled": true,
+        "qwen3.8-flash-next-fp4-1m": {
+          "name": "Qwen3.8-Flash-Next · FP4 · 1M",
           "limit": {
             "context": 1000000,
             "input": 888888,
@@ -47,9 +46,8 @@
             "reasoning": { "supported": true }
           }
         },
-        "DeepSeek-V4.1-Flash": {
-          "name": "DeepSeek-V4.1-Flash-1017",
-          "disabled": true,
+        "deepseek-v4.1-flash-iq2-512k": {
+          "name": "DeepSeek-V4.1-Flash · IQ2 · 512k",
           "limit": {
             "context": 524288,
             "input": 262144,
@@ -59,8 +57,8 @@
             "reasoning": { "supported": true }
           }
         },
-        "Qwen3.8-Flash-Next-Strata": {
-          "name": "Qwen-Flash-Next-IQ3",
+        "qwen3.8-flash-next-iq3-1m": {
+          "name": "Qwen3.8-Flash-Next · IQ3 · 1M",
           "disabled": true,
           "limit": {
             "context": 1000000,

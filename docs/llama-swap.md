@@ -84,11 +84,11 @@ llama-swap-start.sh                           # 启动脚本
 
 | 模型 ID | 后端 | 模型文件 |
 | ------- | ---- | -------- |
-| `Qwen3.8-27B` | llama.cpp | GGUF UD-Q8_K_XL + mmproj |
-| `Qwen3.8-27B-vllm-1M` | vLLM（YaRN） | FP8 |
-| `Qwen3.8-Flash-Next-vllm-1M` | vLLM（YaRN） | NVFP4（1M 上下文，TP2） |
-| `DeepSeek-V4.1-Flash` | strata dsv41 | ISTA-DAS IQ2_XXS + Engram + DSpark |
-| `Qwen3.8-Flash-Next-Strata` | strata flash_next | ISTA-DAS IQ3_XXS（1M，视觉已启用） |
+| `qwen3.8-27b-q8-256k` | llama.cpp | GGUF UD-Q8_K_XL + mmproj |
+| `qwen3.8-27b-fp8-1m` | vLLM（YaRN） | FP8 |
+| `qwen3.8-flash-next-fp4-1m` | vLLM（YaRN） | NVFP4（1M 上下文，TP2） |
+| `deepseek-v4.1-flash-iq2-512k` | strata dsv41 | ISTA-DAS IQ2_XXS + Engram + DSpark |
+| `qwen3.8-flash-next-iq3-1m` | strata flash_next | ISTA-DAS IQ3_XXS（1M，视觉已启用） |
 
 已归档 7 条目（2026-11-16）：cmd 与实测冻结于对应模型文档
 （`docs/models/Qwen3.8-27B.md` / `docs/models/Qwen3.8-Flash-Next.md`）。
@@ -98,11 +98,11 @@ llama-swap-start.sh                           # 启动脚本
   与 `docs/vllm.md` 的「长上下文（YaRN 1M）」节。
 * GPU 分配见 conf `env`：卡号可选（以 conf 实际值为准），均避开 CUDA0
   （防 CLIP 误用）；唯一不变式是 27B 家族与 Flash-Next 家族不共卡
-  （两组可并存）。`Qwen3.8-Flash-Next-vllm-1M` 带 numactl NUMA 绑定，
+  （两组可并存）。`qwen3.8-flash-next-fp4-1m` 带 numactl NUMA 绑定，
   node 编号须与所选卡所在 socket 一致（见下文「NUMA / CPU 绑定」）。
 * `routing` 两个 group 与家族对应：group1 = 27B 家族（2 条目），
-  group2 = Flash-Next 家族（1 条目）；组内换模型即卸载，两组可并存。
-  两个 strata 条目暂不编组。
+  group2 = 4,6 卡系（FP4 vLLM 1M + 两个 strata 条目，共 3 条目）；
+  组内换模型即卸载，两组可并存。
 
 vLLM / SGLang 后端的参数要点见 `docs/vllm.md` / `docs/sglang.md`。
 
@@ -110,7 +110,7 @@ vLLM / SGLang 后端的参数要点见 `docs/vllm.md` / `docs/sglang.md`。
 
 PRO6000 为双路（无 NVLink）：GPU 0-3 挂 NUMA node 0，GPU 4-7 挂 node 1
 （`nvidia-smi topo -m` 的 NUMA Affinity 列；同 socket 卡对为 `NODE`，
-跨 socket 为 `SYS`）。1M 条目（`Qwen3.8-Flash-Next-vllm-1M`；已归档的
+跨 socket 为 `SYS`）。1M 条目（`qwen3.8-flash-next-fp4-1m`；已归档的
 `Qwen3.8-Flash-Next-1M` 同法）的 cmd 以 `numactl --cpunodebind=1` 包裹
 （当前选 4,6，均在 node 1，故编号为 1；改选卡时先确认所选卡所在 node
 再改编号）：

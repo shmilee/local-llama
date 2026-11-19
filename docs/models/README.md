@@ -29,12 +29,17 @@
 
 一个模型家族一个文件：`docs/models/<家族名>.md`。config 条目是文档里的表格行，不是文件。
 
-| 模型 | 现状（2026-11-16 归档后） | 涉及条目 | 文档 |
+| 模型 | 现状（2026-11-19） | 涉及条目 | 文档 |
 | ---- | ---- | ---- | ---- |
-| Qwen3.8-27B | 主力（vllm-1M）、备用（llama.cpp Q8）；3 条目已归档 | 27B, 27B-vllm, 27B-vllm-1M, 27B-1M, 27B-sglang | [Qwen3.8-27B.md](Qwen3.8-27B.md) |
-| Qwen3.8-Flash-Next | 主力（规划，vllm-1M）、实验中（Strata）；4 条目已归档 | QFN, QFN-1M, QFN-vllm, QFN-vllm-1M, QFN-sglang, QFN-Strata | [Qwen3.8-Flash-Next.md](Qwen3.8-Flash-Next.md) |
-| DeepSeek-V4.1-Flash | 实验中（strata） | DeepSeek-V4.1-Flash | [DeepSeek-V4.1-Flash.md](DeepSeek-V4.1-Flash.md) |
+| Qwen3.8-27B | 主力 `qwen3.8-27b-fp8-1m`；备用 `qwen3.8-27b-q8-256k`；3 条目已归档 | `qwen3.8-27b-q8-256k`, `qwen3.8-27b-fp8-1m`（+ 归档 3） | [Qwen3.8-27B.md](Qwen3.8-27B.md) |
+| Qwen3.8-Flash-Next | 主力（规划）`qwen3.8-flash-next-fp4-1m`；实验中 `qwen3.8-flash-next-iq3-1m`；4 条目已归档 | `qwen3.8-flash-next-fp4-1m`, `qwen3.8-flash-next-iq3-1m`（+ 归档 4） | [Qwen3.8-Flash-Next.md](Qwen3.8-Flash-Next.md) |
+| DeepSeek-V4.1-Flash | 实验中（strata，group2） | `deepseek-v4.1-flash-iq2-512k` | [DeepSeek-V4.1-Flash.md](DeepSeek-V4.1-Flash.md) |
 | Qwen3.6-35B-A3B | 已被 27B 取代（PRO6000 历史；T14p 仍在用） | Qwen3.6-35B-A3B | [Qwen3.6-35B-A3B.md](Qwen3.6-35B-A3B.md) |
+
+条目 ID 命名规则：`<家族>-<量化>-<上下文>`，全小写；量化映射 `q8`=Q8_K_XL、
+`fp8`=FP8、`fp4`=NVFP4、`iq2`=IQ2_XXS、`iq3`=IQ3_XXS；上下文 `256k`/`512k`/`1m`；
+后端由量化隐含（写在 description）。旧 ID 保留为 aliases
+（`includeAliasesInList: false`，不进客户端列表）。
 
 > 本索引是 PRO6000 模型清单的单一来源；`llama-swap.md`「模型清单（PRO6000）」一节迁移时改为指向这里。
 
@@ -106,5 +111,7 @@
   llama-swap.md / llama.cpp.md / sglang.md 交叉引用更新
 * 2026-11-17 按「模型内容集中存放」修订：各条目 cmd（宏展开）内嵌模型文档，
   speed-report.md 改为纯数据台账；文档不再引用 config/archive/（仅作机械备份）
-* 未决：strata 条目暂不编组；GPU 4,6 同卡（QFN-vllm-1M × DS4.1）冲突留待后续决策
+* 2026-11-19 模型 ID 统一为 `<家族>-<量化>-<上下文>`；旧 ID 保留为 aliases，
+  `includeAliasesInList` 置 false；三个 4,6 卡系条目并入 group2
+* 已定：2026-11-18 GPU 4,6 同卡冲突以并入 group2 解决（FP4 vLLM 1M + 两个 strata 条目互斥切换）
 * T14p 模型后续按本结构补建

@@ -131,7 +131,7 @@ sendLoadingState: true
 # - when true, model aliases will be output to the API model listing duplicating
 #   all fields except for Id so chat UIs can use the alias equivalent to the original.
 #   列出变体, like :XXXX
-includeAliasesInList: true
+includeAliasesInList: false
 
 # globalTTL: the default TTL in seconds before unloading a model
 # - optional, default: 0 (never automatically unload)
@@ -362,8 +362,12 @@ upstream:
 # - below are examples of the all the settings a model can have
 models:
   # keys are the model names used in API requests
+  # 命名规则：<家族>-<量化>-<上下文>（全小写）。
+  # 量化映射：q8=Q8_K_XL，fp8=FP8，fp4=NVFP4，iq2=IQ2_XXS，iq3=IQ3_XXS；
+  # 后端由量化隐含（GGUF/q8 → llama.cpp，fp8/fp4 → vLLM，iq* → strata），细节写 description。
+  # 上下文：256k / 512k / 1m。旧 ID 保留为 aliases（includeAliasesInList: false，不进客户端列表）。
   # 1a. q27b
-  "Qwen3.8-27B":
+  "qwen3.8-27b-q8-256k":
     # cmd: the command to run to start the inference server.
     # - required
     # - it is just a string, similar to what you would run on the CLI
@@ -405,6 +409,7 @@ models:
     # - aliases must be unique globally
     # - useful for impersonating a specific model
     aliases:
+      - "Qwen3.8-27B"
       # - "Qwen3.6-27B"  # 保留旧模型名称，历史统计原地保留
 
     # metadata: a dictionary of arbitrary values that are included in /v1/models
@@ -519,7 +524,7 @@ models:
   # - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 必须，否则 vLLM 拒绝超过模型最大长度
   # - factor 为静态缩放：仅在确实服务长 prompt 时使用；~524K 负载可降到 2.0
   # - 显存：docs/vllm.md 单卡 262k 实测 KV 池 ~170 万 tokens，故 1M 单请求可容纳
-  "Qwen3.8-27B-vllm-1M":
+  "qwen3.8-27b-fp8-1m":
     useModelName: "${models_dir}/Qwen3.8-27B-FP8"
     cmd: |
       ${default-vllm}
@@ -536,6 +541,8 @@ models:
       - "CUDA_VISIBLE_DEVICES=2"
       - "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1"
     description: "Dense model (27B) from Aliyun Qwen, FP8, vLLM backend, YaRN 1M context"
+    aliases:
+      - "Qwen3.8-27B-vllm-1M"
     metadata:
       port: ${PORT}
       note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_1m} (YaRN x4)"
@@ -573,7 +580,7 @@ models:
   #   就近落在 node1，membind 只是禁止回退、徒增硬失败风险（node1 共 128G）。
   # - VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 必须（同 27B-vllm-1M）。
   # - YaRN factor 静态生效，短 prompt 同样受影响；建议长上下文专用端点。
-  "Qwen3.8-Flash-Next-vllm-1M":
+  "qwen3.8-flash-next-fp4-1m":
     useModelName: "${models_dir}/Qwen3.8-Flash-Next-NVFP4"
     cmd: |
       numactl --cpunodebind=1 pixi run -m ${env.LOCAL_LLAMA_HOME} -e vllm-cuda vllm serve
@@ -601,6 +608,8 @@ models:
       - "VLLM_PLE_CPU_OFFLOAD=1"
       - "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1"
     description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, vLLM backend, YaRN 1M context (TP2)"
+    aliases:
+      - "Qwen3.8-Flash-Next-vllm-1M"
     metadata:
       port: ${PORT}
       note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_1m} (YaRN x4, dual-GPU)"
@@ -627,12 +636,14 @@ models:
   #   一次性 ~4.5min（2048 tok/s），decode ~147 tok/s；decode 依赖 Engram
   #   热缓存（冷行仅 ~11-15 tok/s），重启后 cat Engram 表热化一次
   #   （run config 已带 --ssd-cache 0 与 DS4_SPLIT=19,21）
-  "DeepSeek-V4.1-Flash":
+  "deepseek-v4.1-flash-iq2-512k":
     cmd: |
       ${default-strata}
       --config config/strata-ds41.json
       --port ${PORT}
     description: "MoE (ISTA-DAS IQ2_XXS 2.00bpw, 233GB) via Strata dsv41 engine, 2x PRO6000"
+    aliases:
+      - "DeepSeek-V4.1-Flash"
     metadata:
       port: ${PORT}
       note: "The ${MODEL_ID} is running on port ${PORT}, context=524288 (strata-dsv41 dual-GPU)"
@@ -663,12 +674,14 @@ models:
   #   （该条目 2026-11-16 已归档，见 config/archive/）
   # - 实测（docs/strata.md）：1M prefill 4349 tok/s（~4min）、decode @1M
   #   161.5 tok/s、显存 72G/96G；RAM 驻留 ~74G（PLE mlock + 专家 arena）
-  "Qwen3.8-Flash-Next-Strata":
+  "qwen3.8-flash-next-iq3-1m":
     cmd: |
       ${default-strata}
       --config config/strata-qwen.json
       --port ${PORT}
     description: "MoE (ISTA-DAS IQ3_XXS, 71GB) via Strata flash_next engine, 1x PRO6000, 1M ctx, images"
+    aliases:
+      - "Qwen3.8-Flash-Next-Strata"
     metadata:
       port: ${PORT}
       note: "The ${MODEL_ID} is running on port ${PORT}, context=1048576 (strata-engine, PLE mlocked in RAM, vision on)"
@@ -702,7 +715,7 @@ hooks:
     # - when preloading multiple models at once, define a group
     #   otherwise models will be loaded and swapped out
     preload:
-      #- "Qwen3.8-27B"
+      #- "qwen3.8-27b-q8-256k"
 
 # routing:
 # Controls how llama-swap decides which models can run at the same time and
@@ -778,17 +791,17 @@ routing:
           # members: the model IDs in this group
           # required
           members:
-            - "Qwen3.8-27B"
-            - "Qwen3.8-27B-vllm-1M"
+            - "qwen3.8-27b-q8-256k"
+            - "qwen3.8-27b-fp8-1m"
 
         "group2":
           swap: true
           exclusive: false
           persistent: true
           members:
-            - "Qwen3.8-Flash-Next-vllm-1M"
-            - "DeepSeek-V4.1-Flash"
-            - "Qwen3.8-Flash-Next-Strata"
+            - "qwen3.8-flash-next-fp4-1m"
+            - "deepseek-v4.1-flash-iq2-512k"
+            - "qwen3.8-flash-next-iq3-1m"
 
       # The matrix lists the model combinations that are allowed to run
       # concurrently. When a model is requested, the solver makes room for it
@@ -817,8 +830,8 @@ routing:
         # - sets and evict_costs may mix vars with real model IDs
         # - a var takes precedence when its name is also a real model ID
         vars:
-          q27b: Qwen3.8-27B-vllm-1M
-          q38fn: Qwen3.8-Flash-Next-vllm-1M
+          q27b: qwen3.8-27b-fp8-1m
+          q38fn: qwen3.8-flash-next-fp4-1m
 
         # evict_costs: relative cost of losing a running model (default: 1)
         evict_costs:
@@ -854,5 +867,5 @@ routing:
         # - models default to priority 0
         # - higher priority requests are serviced first in the queue
         priority:
-          Qwen3.8-27B-vllm-1M: 10
-          Qwen3.8-Flash-Next-vllm-1M: 6
+          qwen3.8-27b-fp8-1m: 10
+          qwen3.8-flash-next-fp4-1m: 6
