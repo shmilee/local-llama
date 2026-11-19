@@ -1,8 +1,12 @@
 [mirrors]
-"https://conda.anaconda.org/conda-forge" = ["https://mirrors.ustc.edu.cn/anaconda/cloud/conda-forge"]
-
-[pypi-config]
-index-url = "https://mirrors.ustc.edu.cn/pypi/simple"
+"https://conda.anaconda.org/conda-forge" = [
+    "https://mirrors.sustech.edu.cn/anaconda/cloud/conda-forge",
+    "https://mirror.sjtu.edu.cn/anaconda/cloud/conda-forge",
+    "https://mirrors.bfsu.edu.cn/anaconda/cloud/conda-forge",
+    "https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge",
+    "https://mirrors.aliyun.com/anaconda/cloud/conda-forge",
+    "https://prefix.dev/conda-forge"
+]
 
 [concurrency]
 solves = 3
