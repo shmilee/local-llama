@@ -47,7 +47,7 @@
 #     与已安装版本不一致时自动更新。
 #   * prefix 自带 pnpm（$PREFIX/bin/pnpm）存在时按 prefix 管理：
 #     每次运行与 registry latest 同步；
-#   * 否则 pnpm 优先用系统的（>= 10.4），否则用 npm 装到 $PREFIX；
+#   * 否则 pnpm 优先用系统的（>= 10.4），否则用 npm 装到 ${PREFIX}；
 #     无论哪种，store/cache 都落在 $PREFIX 内，不污染 ~/.local/share/pnpm。
 #   * OpenChamber 数据默认放 $PREFIX/data（wrapper 里设置
 #     OPENCHAMBER_DATA_DIR），不写 ~/.config/openchamber。
@@ -242,9 +242,9 @@ if [ "$CHECK_ONLY" = 1 ]; then
     echo "安装目录: $PREFIX"
     if [ "$LINK_BINS" = 1 ]; then
         if [ "$PREFIX_INSIDE" = 1 ] && [ "$BIN_DIR" = "$REPO_ROOT/bin" ]; then
-            echo "命令链接: $BIN_DIR（相对软链）"
+            echo "命令链接: ${BIN_DIR}（相对软链）"
         else
-            echo "命令链接: $BIN_DIR（绝对软链）"
+            echo "命令链接: ${BIN_DIR}（绝对软链）"
         fi
     else
         echo "命令链接: 不创建（使用 $PREFIX/bin）"
@@ -252,14 +252,14 @@ if [ "$CHECK_ONLY" = 1 ]; then
     if [ -x "$PREFIX/node/bin/node" ]; then
         CHECK_NODE_CUR="$("$PREFIX/node/bin/node" --version | sed 's/^v//')"
         if [ "$CHECK_NODE_CUR" = "$NODE_VERSION" ]; then
-            echo "prefix node:   $CHECK_NODE_CUR（已是目标版本 $NODE_VERSION）"
+            echo "prefix node:   ${CHECK_NODE_CUR}（已是目标版本 ${NODE_VERSION}）"
         else
             echo "prefix node:   ${CHECK_NODE_CUR:-未知} → 将更新到 $NODE_VERSION"
         fi
     elif [ "$FORCE_NODE" = 1 ]; then
         echo "系统 node:     ${SYS_NODE_VER:-未安装}（已强制安装到 prefix，忽略系统版本）"
     else
-        echo "系统 node:     ${SYS_NODE_VER:-未安装}（要求 >= $NODE_MIN）→ $([ "$SYS_NODE" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
+        echo "系统 node:     ${SYS_NODE_VER:-未安装}（要求 >= ${NODE_MIN}）→ $([ "${SYS_NODE}" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
     fi
     if [ -x "$PREFIX/bin/opencode" ]; then
         # wrapper 把 $PREFIX/bin 放在 PATH 开头，prefix 自带 opencode 存在时优先使用它
@@ -277,7 +277,7 @@ if [ "$CHECK_ONLY" = 1 ]; then
     elif [ "$FORCE_OPENCODE" = 1 ]; then
         echo "系统 opencode: ${SYS_OPENCODE_VER:-未安装}（已强制安装到 prefix，忽略系统版本）"
     else
-        echo "系统 opencode: ${SYS_OPENCODE_VER:-未安装}（要求 >= $OPENCODE_MIN）→ $([ "$SYS_OPENCODE" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
+        echo "系统 opencode: ${SYS_OPENCODE_VER:-未安装}（要求 >= ${OPENCODE_MIN}）→ $([ "${SYS_OPENCODE}" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
     fi
     echo "opencode 目标: $OPENCODE_VERSION"
     if [ -x "$PREFIX/bin/pnpm" ]; then
@@ -289,7 +289,7 @@ if [ "$CHECK_ONLY" = 1 ]; then
             echo "prefix pnpm:   ${CHECK_PNPM_CUR:-未知}（已是最新，或 latest 解析失败将沿用）"
         fi
     else
-        echo "系统 pnpm:     ${SYS_PNPM_VER:-未安装}（要求 >= $PNPM_MIN）→ $([ "$SYS_PNPM" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
+        echo "系统 pnpm:     ${SYS_PNPM_VER:-未安装}（要求 >= ${PNPM_MIN}）→ $([ "${SYS_PNPM}" = 1 ] && echo 使用系统 || echo 安装到 prefix)"
     fi
     CHECK_OC_PKG="$PREFIX/app/node_modules/@openchamber/web/package.json"
     CHECK_OC_CUR=""
@@ -299,7 +299,7 @@ if [ "$CHECK_ONLY" = 1 ]; then
         if [ -z "$CHECK_OC_LATEST" ]; then
             echo "openchamber:   ${CHECK_OC_CUR:-未安装}（latest 版本解析失败，运行时将重试）"
         elif [ "$CHECK_OC_CUR" = "$CHECK_OC_LATEST" ]; then
-            echo "openchamber:   $CHECK_OC_CUR（已是 latest）"
+            echo "openchamber:   ${CHECK_OC_CUR}（已是 latest）"
         else
             echo "openchamber:   ${CHECK_OC_CUR:-未安装} → 将更新到 $CHECK_OC_LATEST (latest)"
         fi
@@ -312,7 +312,7 @@ if [ "$CHECK_ONLY" = 1 ]; then
         echo "OpenCode 配置: 跳过（--no-opencode-config）"
     fi
     if [ "$WITH_OMP" = 1 ]; then
-        echo "oh-my-opencode-slim: 安装（version=$OMP_VERSION, preset=$OMP_PRESET, skills=$OMP_SKILLS）"
+        echo "oh-my-opencode-slim: 安装（version=${OMP_VERSION}, preset=${OMP_PRESET}, skills=${OMP_SKILLS}）"
         if [ -f "$REPO_ROOT/config/oh-my-opencode-slim.json" ]; then
             echo "OMP 配置模板: 复制 $REPO_ROOT/config/oh-my-opencode-slim.json -> $OC_CONFIG_DIR/oh-my-opencode-slim.json"
         fi
@@ -330,19 +330,19 @@ mkdir -p "$PREFIX" "$DL_DIR" "$PREFIX/cache"
 
 # --- Node ---
 if [ "$SYS_NODE" = 1 ]; then
-    log "使用系统 node $(node --version)（>= $NODE_MIN）"
+    log "使用系统 node $(node --version)（>= ${NODE_MIN}）"
     NODE_BIN="$(command -v node)"
 else
     NODE_DIR="$PREFIX/node"
     CURRENT_NODE_VER=""
     [ -x "$NODE_DIR/bin/node" ] && CURRENT_NODE_VER="$("$NODE_DIR/bin/node" --version | sed 's/^v//')"
     if [ "$CURRENT_NODE_VER" = "$NODE_VERSION" ]; then
-        log "使用已有 $NODE_DIR/bin/node（$("$NODE_DIR/bin/node" --version)，目标 $NODE_VERSION）"
+        log "使用已有 ${NODE_DIR}/bin/node（$("${NODE_DIR}/bin/node" --version)，目标 ${NODE_VERSION}）"
     else
         if [ -n "$CURRENT_NODE_VER" ]; then
             log "更新 prefix node: $CURRENT_NODE_VER -> $NODE_VERSION"
         else
-            log "系统 node 不可用或低于 $NODE_MIN，安装 Node $NODE_VERSION 到 $NODE_DIR"
+            log "系统 node 不可用或低于 ${NODE_MIN}，安装 Node ${NODE_VERSION} 到 ${NODE_DIR}"
         fi
         ARCH="$(arch_name)"
         TARBALL="node-v$NODE_VERSION-linux-$ARCH.tar.xz"
@@ -388,7 +388,7 @@ fi
 
 # --- pnpm ---
 if [ "$SYS_PNPM" = 1 ]; then
-    log "使用系统 pnpm $SYS_PNPM_VER（store 仍指向 $PREFIX/pnpm-store）"
+    log "使用系统 pnpm ${SYS_PNPM_VER}（store 仍指向 ${PREFIX}/pnpm-store）"
     PNPM_BIN="$(command -v pnpm)"
 else
     PNPM_BIN="$PREFIX/bin/pnpm"
@@ -403,9 +403,9 @@ else
     fi
     if [ "$REUSE_PNPM" = 1 ]; then
         if [ -z "$LATEST_PNPM_VER" ]; then
-            log "使用已有 $PNPM_BIN（$("$PNPM_BIN" --version)；latest 解析失败，沿用已装版本）"
+            log "使用已有 ${PNPM_BIN}（$("${PNPM_BIN}" --version)；latest 解析失败，沿用已装版本）"
         else
-            log "使用已有 $PNPM_BIN（$("$PNPM_BIN" --version)，已是 latest）"
+            log "使用已有 ${PNPM_BIN}（$("${PNPM_BIN}" --version)，已是 latest）"
         fi
     else
         if [ -n "$CURRENT_PNPM_VER" ]; then
@@ -426,7 +426,7 @@ fi
 # --- OpenCode ---
 INSTALLED_OPENCODE=""
 if [ "$SYS_OPENCODE" = 1 ]; then
-    log "使用系统 opencode v$SYS_OPENCODE_VER（>= $OPENCODE_MIN）"
+    log "使用系统 opencode v${SYS_OPENCODE_VER}（>= ${OPENCODE_MIN}）"
 else
     INSTALLED_OPENCODE="$PREFIX/bin/opencode"
     CURRENT_OPENCODE_VER=""
@@ -447,7 +447,7 @@ else
     fi
 
     if [ "$REUSE_OPENCODE" = 1 ]; then
-        log "使用已有 $INSTALLED_OPENCODE（$("$INSTALLED_OPENCODE" --version)）"
+        log "使用已有 ${INSTALLED_OPENCODE}（$("${INSTALLED_OPENCODE}" --version)）"
     else
         if [ "$OPENCODE_VERSION" = "latest" ]; then
             [ -n "$LATEST_OPENCODE_VER" ] || die "无法解析 $OPENCODE_PACKAGE 的 latest 版本（registry 不可达？可稍后重试）"
@@ -505,7 +505,7 @@ if [ "$PACKAGE_VERSION" = "latest" ]; then
     fi
 else
     TARGET_OC_VER="$PACKAGE_VERSION"
-    log "安装 $PACKAGE@$TARGET_OC_VER 到 $APP_DIR（当前 ${CURRENT_OC_VER:-未安装}）"
+    log "安装 ${PACKAGE}@${TARGET_OC_VER} 到 ${APP_DIR}（当前 ${CURRENT_OC_VER:-未安装}）"
 fi
 
 # 固定解析出的版本安装；pnpm add 幂等，版本一致时快速完成
@@ -548,7 +548,7 @@ if [ "$WITH_OC_CONFIG" = 1 ]; then
             warn "存在 $OC_CONFIG_DIR/opencode.jsonc（优先于 .json），如需生效请手动合并或移除"
         fi
     else
-        warn "未找到 $OC_CONFIG_SRC，跳过 OpenCode 配置复制"
+        warn "未找到 ${OC_CONFIG_SRC}，跳过 OpenCode 配置复制"
     fi
 else
     log "跳过 OpenCode 配置复制（--no-opencode-config）"
@@ -596,7 +596,7 @@ if [ "$WITH_OMP" = 1 ]; then
     esac
     [ "$OMP_DRY" = 1 ] && OMP_ARGS+=(--dry-run)
 
-    log "写入 OpenCode 配置：$OC_CONFIG_DIR（preset=$OMP_PRESET, skills=$OMP_SKILLS, bg-subagents=$OMP_BG）"
+    log "写入 OpenCode 配置：${OC_CONFIG_DIR}（preset=${OMP_PRESET}, skills=${OMP_SKILLS}, bg-subagents=${OMP_BG}）"
     if ! OPENCODE_CONFIG_DIR="$OC_CONFIG_DIR" "$NODE_BIN" "$OMP_ENTRY" "${OMP_ARGS[@]}"; then
         rm -f "$OMP_BEFORE" "$OMP_AFTER" "$OMP_BEFORE_PATHS" "$OMP_AFTER_PATHS" "$OMP_LIST"
         die "oh-my-opencode-slim 安装失败"
@@ -610,7 +610,7 @@ if [ "$WITH_OMP" = 1 ]; then
             log "已备份现有 OMP 配置: $OMP_CFG_DST.bak.*"
         fi
         cp "$REPO_ROOT/config/oh-my-opencode-slim.json" "$OMP_CFG_DST"
-        log "OMP 配置模板已应用: $OMP_CFG_DST（active preset: inherit-session）"
+        log "OMP 配置模板已应用: ${OMP_CFG_DST}（active preset: inherit-session）"
     fi
 
     if [ "$OMP_DRY" = 1 ]; then
@@ -640,7 +640,7 @@ if [ "$WITH_OMP" = 1 ]; then
         fi
         if [ -f "$OC_CONFIG_DIR/oh-my-opencode-slim.json" ]; then
             OMP_AGENTS="$("$NODE_BIN" -e "const c=require('$OC_CONFIG_DIR/oh-my-opencode-slim.json'); const p=(c.presets&&c.presets[c.preset])||{}; console.log(Object.keys(p).join(' '))" 2>/dev/null || true)"
-            [ -n "$OMP_AGENTS" ] && echo "    内置 agents（preset=$OMP_PRESET）：$OMP_AGENTS"
+            [ -n "${OMP_AGENTS}" ] && echo "    内置 agents（preset=${OMP_PRESET}）：${OMP_AGENTS}"
         fi
         log "oh-my-opencode-slim 配置已写入；重启 OpenCode 后生效"
     fi
@@ -711,7 +711,7 @@ if [ "$LINK_BINS" = 1 ]; then
     else
         LINK_MODE="绝对软链"
     fi
-    echo "    commands    : $BIN_DIR/{${LINKED# }}（$LINK_MODE）"
+    echo "    commands    : ${BIN_DIR}/{${LINKED# }}（${LINK_MODE}）"
     echo "    openchamber : $BIN_DIR/openchamber -> $(readlink -f "$BIN_DIR/openchamber")"
 else
     echo "    commands    : 未创建链接，请把 $PREFIX/bin 加入 PATH"
@@ -723,7 +723,7 @@ echo "环境变量与数据路径："
 echo "  OPENCHAMBER_DATA_DIR  $PREFIX/data          （wrapper 已默认设置）"
 echo "  OpenChamber app       $APP_DIR"
 if [ "$WITH_OMP" = 1 ]; then
-    echo "  oh-my-opencode-slim   $PREFIX/omp-cli（安装器 + preset=$OMP_PRESET）"
+    echo "  oh-my-opencode-slim   ${PREFIX}/omp-cli（安装器 + preset=${OMP_PRESET}）"
 fi
 echo "  pnpm store            $PREFIX/pnpm-store"
 echo "  npm/pnpm cache        $PREFIX/cache"

@@ -88,7 +88,7 @@ fi
 
 # --- 校验配置引用的 ${env.*} 都已在 local.env 中提供 ---
 if [ ! -f "$LOCAL_ENV" ]; then
-    echo "WARN: 未找到 $LOCAL_ENV；配置中的 \${env.*} 可能为空" >&2
+    echo "WARN: 未找到 ${LOCAL_ENV}；配置中的 \${env.*} 可能为空" >&2
 fi
 
 missing=""

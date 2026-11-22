@@ -327,7 +327,7 @@ verify_skills() {
     [[ -f "$DEST/$name/SKILL.md" ]] || missing+=("$name")
   done
   if [[ "${#missing[@]}" -gt 0 ]]; then
-    die "以下技能未正确落盘: ${missing[*]}（检查 $DEST）"
+    die "以下技能未正确落盘: ${missing[*]}（检查 ${DEST}）"
   fi
 }
 
@@ -401,7 +401,7 @@ while [[ $# -gt 0 ]]; do
     --uninstall)    do_uninstall=1; shift ;;
     --clean-agents) do_clean=1; shift ;;
     --check)        do_check=1; shift ;;
-    --npx)          warn "--npx 已弃用：安装目录固定为 $DEST，改用 git + symlink"; shift ;;
+    --npx)          warn "--npx 已弃用：安装目录固定为 ${DEST}，改用 git + symlink"; shift ;;
     --list)         list_all; exit 0 ;;
     -h|--help)      usage; exit 0 ;;
     --*)            die "未知参数: $1（用 --help 查看用法）" ;;
@@ -422,7 +422,7 @@ validate_registry
 [[ "${#chosen_sources[@]}" -gt 0 ]] || chosen_sources=("${SRC_ALL[@]}")
 
 for s in "${chosen_sources[@]}"; do
-  [[ -n "${SRC_REPO[$s]:-}" ]] || die "未知来源: $s（可选 ${SRC_ALL[*]}）"
+  [[ -n "${SRC_REPO[${s}]:-}" ]] || die "未知来源: ${s}（可选 ${SRC_ALL[*]}）"
 done
 
 for g in "${bare_groups[@]}"; do

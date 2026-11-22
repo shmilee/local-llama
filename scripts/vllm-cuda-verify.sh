@@ -31,7 +31,7 @@ vllm --version
 
 # 3. 工具链自检
 echo
-echo "== 3. 工具链自检（CUDA_HOME=$CUDA_HOME）=="
+echo "== 3. 工具链自检（CUDA_HOME=${CUDA_HOME}）=="
 test -x "$CUDA_HOME/bin/nvcc" || { echo "FATAL: $CUDA_HOME/bin/nvcc 不存在或不可执行（先跑 vllm-cuda-prepare）"; exit 1; }
 NVCC_VER=$("$CUDA_HOME/bin/nvcc" --version 2>/dev/null | grep -oP 'release \K[0-9.]+' | head -1)
 echo "nvcc: ${NVCC_VER:-unknown} ($CUDA_HOME/bin/nvcc)"

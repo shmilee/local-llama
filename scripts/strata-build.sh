@@ -6,7 +6,7 @@
 #   PIXI_PROJECT_ROOT, STRATA_VERSION, STRATA_BACKEND,
 #   CONDA_PREFIX, CMAKE_PREFIX_PATH, CUDACXX（仅 cuda）
 # 可选环境变量:
-#   STRATA_BUILD_DIR    主引擎构建目录（相对源码目录，默认 build-$BACKEND）
+#   STRATA_BUILD_DIR    主引擎构建目录（相对源码目录，默认 build-${BACKEND}）
 #   STRATA_CUDA_ARCHS   CUDA 架构（默认 = 本机 GPU 探测出的架构号，如 120；
 #                       跨卡发行可设 "75;86;89;120"，见 packaging/build_cuda_linux.sh）
 #   STRATA_CMAKE_EXTRA  追加 cmake 参数（如 -DSTRATA_GEOMETRY=<name>）
@@ -67,7 +67,7 @@ cd "$SRC_DIR"
 if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
     CACHED_CC=$(grep -E '^CMAKE_C_COMPILER:' "$BUILD_DIR/CMakeCache.txt" | cut -d= -f2-)
     if [ -n "$CACHED_CC" ] && [ ! -x "$CACHED_CC" ]; then
-        echo "CMake 缓存引用了不存在的编译器 $CACHED_CC，清除构建缓存"
+        echo "CMake 缓存引用了不存在的编译器 ${CACHED_CC}，清除构建缓存"
         rm -rf "$BUILD_DIR"
     fi
 fi

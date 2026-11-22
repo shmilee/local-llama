@@ -38,7 +38,7 @@ for i in range(n):
 EOF
 
 echo
-echo "== 3. 工具链信息（CUDA_HOME=$CUDA_HOME）=="
+echo "== 3. 工具链信息（CUDA_HOME=${CUDA_HOME}）=="
 NVCC_VER=$("$CUDA_HOME/bin/nvcc" --version 2>/dev/null | grep -oP 'release \K[0-9.]+' | head -1)
 echo "nvcc: ${NVCC_VER:-unknown} ($CUDA_HOME/bin/nvcc)"
 for hdr in cuda_runtime.h curand.h cublas_v2.h; do

@@ -158,7 +158,7 @@ mode_stop() {
         local url
         url="$(service_url || true)"
         case "$url" in
-            http://*|https://*) echo "WARN: OpenCode 服务仍在运行: $url（可能被监督进程重新拉起）" ;;
+            http://*|https://*) echo "WARN: OpenCode 服务仍在运行: ${url}（可能被监督进程重新拉起）" ;;
             *) echo "==> OpenCode 后台服务已停止" ;;
         esac
     fi
@@ -174,7 +174,7 @@ mode_status() {
     esac
     if [ -n "$OPENCHAMBER_BIN" ]; then
         show_openchamber_url "$PORT" \
-            || echo "OpenChamber: 端口 $PORT 无运行实例（启动: bash $0 -p $PORT）"
+            || echo "OpenChamber: 端口 ${PORT} 无运行实例（启动: bash $0 -p ${PORT}）"
     else
         echo "OpenChamber: 未安装（先运行 scripts/openchamber-install.sh）"
     fi
@@ -269,7 +269,7 @@ mode_server() {
         "$OPENCHAMBER_BIN" "${args[@]}"
 
     echo
-    echo "停止: $0 --stop -p $PORT（默认同时停 OpenCode 服务；加 --keep-opencode 保留）"
+    echo "停止: $0 --stop -p ${PORT}（默认同时停 OpenCode 服务；加 --keep-opencode 保留）"
 }
 
 # --- 前置检查与分发 ---

@@ -6,7 +6,7 @@
 #   PIXI_PROJECT_ROOT, LLAMACPP_VERSION, LLAMACPP_BACKEND,
 #   CONDA_PREFIX, CMAKE_PREFIX_PATH, CUDACXX（仅 cuda）
 # 可选环境变量:
-#   LLAMACPP_BUILD_DIR  构建目录（相对源码目录，默认 build-$BACKEND）
+#   LLAMACPP_BUILD_DIR  构建目录（相对源码目录，默认 build-${BACKEND}）
 set -euo pipefail
 
 BACKEND="${LLAMACPP_BACKEND:-}"
@@ -46,7 +46,7 @@ cd "$PIXI_PROJECT_ROOT/download/llama.cpp-$LLAMACPP_VERSION"
 if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
     CACHED_CC=$(grep -E '^CMAKE_C_COMPILER:' "$BUILD_DIR/CMakeCache.txt" | cut -d= -f2-)
     if [ -n "$CACHED_CC" ] && [ ! -x "$CACHED_CC" ]; then
-        echo "CMake 缓存引用了不存在的编译器 $CACHED_CC，清除构建缓存"
+        echo "CMake 缓存引用了不存在的编译器 ${CACHED_CC}，清除构建缓存"
         rm -rf "$BUILD_DIR"
     fi
 fi
