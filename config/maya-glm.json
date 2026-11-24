@@ -1,0 +1,38 @@
+{
+  "exe": ".pixi/envs/maya-cuda/maya/build/maya",
+  "args": [
+    "--glm-pack",
+    "/data/huggingface-downloads/GLM-5.3-Flash-GGUF/UD-Q3_K_XL/pack",
+    "--max-context",
+    "1048576",
+    "--expert-cache",
+    "auto",
+    "--prefill",
+    "auto",
+    "--kv-streaming",
+    "on",
+    "--expert-profile",
+    "/data/huggingface-downloads/GLM-5.3-Flash-GGUF/UD-Q3_K_XL/pack/expert-profile.bin",
+    "--expert-profile-save",
+    "/data/huggingface-downloads/GLM-5.3-Flash-GGUF/UD-Q3_K_XL/pack/expert-profile.bin"
+  ],
+  "cwd": ".",
+  "tokenizer": "/data/huggingface-downloads/GLM-5.3-Flash-GGUF/UD-Q3_K_XL/pack/tokenizer",
+  "model_name": "glm-5.3-flash",
+  "gpu": [
+    4,
+    6
+  ],
+  "sampling": {
+    "temperature": 1.0,
+    "top_p": 0.95
+  },
+  "reasoning_effort": "max",
+  "lib_dirs": [],
+  "port": 18080,
+  "web_ui": false,
+  "log": "logs/maya-glm.log",
+  "env": {
+    "MAYA_GLM_SPLIT": "24"
+  }
+}

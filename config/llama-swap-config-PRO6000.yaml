@@ -254,6 +254,12 @@ macros:
     env -C ${env.LOCAL_LLAMA_HOME}
     pixi run -m ${env.LOCAL_LLAMA_HOME} -e strata-cuda strata serve
 
+  # Project Maya（pixi 环境 maya-cuda）
+  # run config 由条目指定（config/maya-*.json，--config 在条目 cmd 里）
+  "default-maya": >
+    env -C ${env.LOCAL_LLAMA_HOME}
+    pixi run -m ${env.LOCAL_LLAMA_HOME} -e maya-cuda maya
+
   # Example of environment variable macros
   # - ${env.VAR_NAME} pulls the value from the system environment
   # - useful for paths, secrets, or machine-specific configuration
@@ -639,25 +645,24 @@ models:
       reranker: false
       context: 1000000
 
-  # 3s. DeepSeek V4.1 Flash —— strata dsv41 后端（双卡切分，512k 上下文）
-  # - 模型：ISTA-DAS IQ2_XXS 2.00bpw（~131G）+ Engram（103G）+ DSpark drafter（7.5G），
-  #   只读 ${models_dir}/DeepSeek-V4.1-Flash/；pack 在 strata-packs/dsv41-iq2xxs（仓库根）
-  # - 引擎：strata-cuda 环境源码构建（v0.2.4.2，pin 原因见 docs/strata-prefill-regression.md）
-  # - 512k 为实测档（docs/strata.md）：显存零压力（KV 0.27G/卡），fresh prefill
-  #   一次性 ~4.5min（2048 tok/s），decode ~147 tok/s；decode 依赖 Engram
-  #   热缓存（冷行仅 ~11-15 tok/s），重启后 cat Engram 表热化一次
-  #   （run config 已带 --ssd-cache 0 与 DS4_SPLIT=19,21）
-  "deepseek-v4.1-flash-iq2-512k":
+  # 3t. GLM-5.3-Flash · Q3_K_XL —— Project Maya 主引擎（双卡 4,6，1M）
+  # - 模型：unsloth/GLM-5.3-Flash-GGUF UD-Q3_K_XL（147.5GB，ModelScope 镜像），
+  #   只读 ${models_dir}/GLM-5.3-Flash-GGUF/UD-Q3_K_XL/；pack 在其 pack/
+  # - 引擎：maya-cuda 环境源码构建（v1.1.76）；maya.py 提供 OpenAI/Anthropic API
+  # - 1M ctx（实测 740K prompt prefill 4.1K tok/s），KV streaming on；
+  #   视觉暂未启用（maya-vision 未构建）
+  "glm-5.3-flash-q3-1m":
     cmd: |
-      ${default-strata}
-      --config config/strata-ds41.json
+      ${default-maya}
+      --config config/maya-glm.json
       --port ${PORT}
-    description: "MoE (ISTA-DAS IQ2_XXS 2.00bpw, 233GB) via Strata dsv41 engine, 2x PRO6000"
+    description: "MoE (GLM-5.3-Flash Unsloth Q3_K_XL, 147.5GB) via Project Maya, 2x PRO6000, 1M ctx"
     aliases:
-      - "DeepSeek-V4.1-Flash"
+      - "GLM-5.3-Flash"
+      - "GLM-5.3-Flash-Maya"
     metadata:
       port: ${PORT}
-      note: "The ${MODEL_ID} is running on port ${PORT}, context=524288 (strata-dsv41 dual-GPU)"
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=1048576 (maya, 2x PRO6000)"
     ttl: 36000
     timeouts:
       connect: 30
@@ -668,10 +673,13 @@ models:
     capabilities:
       in: [text]
       out: [text]
-      tools: false
+      tools: true
       reranker: false
-      context: 524288
+      context: 1048576
     sendLoadingState: true
+
+  # （DeepSeek-V4.1 条目待 Maya 量化定案：Strata 0.2.14 起不再支持 dsv41，
+  #   DS4.1 走 Project Maya 的 maya-ds4；Maya-S / Maya-XS 模型未下载前先留空。）
 
   # 4s. Qwen3.8-Flash-Next —— strata flash_next 后端（单卡，1M 上下文，支持图片）
   # - 模型：ISTA-DAS IQ3_XXS（71G，2 分片）+ PLE 表（shard 2，26.8GiB，
@@ -811,7 +819,7 @@ routing:
           persistent: true
           members:
             - "qwen3.8-flash-next-fp4-1m"
-            - "deepseek-v4.1-flash-iq2-512k"
+            - "glm-5.3-flash-q3-1m"
             - "qwen3.8-flash-next-iq3-1m"
 
       # The matrix lists the model combinations that are allowed to run

@@ -56,6 +56,16 @@
    - <https://huggingface.co/unsloth/DeepSeek-V4.1-Flash-1017-GGUF>
      + 只下载草稿 `dspark-DeepSeek-V4.1-Flash-1017-Q8_0.gguf`
 
+4. MoE, GLM-5.3-Flash (321B, 18B active), Text + Image, Project Maya 引擎
+   - <https://huggingface.co/unsloth/GLM-5.3-Flash-GGUF>（ModelScope 有镜像，国内快）
+     + **UD-Q3_K_XL（147.5GB，本次选）** / UD-IQ3_XXS（120.4GB）/ UD-IQ2_XXS（101.8GB）
+     + UD-Q4_K_XL 199.7GB 起对 2×96G 偏大（只适合 3 卡或更大显存）
+   - <https://huggingface.co/peasantsmith/GLM-5.3-Flash-Maya-GGUF>（Maya 自家）
+     + Maya-M（116GB，IQ2_S/IQ3_XXS，Q6_K attention，带 MTP 草稿块）
+     + Maya-S 96.5GB / Maya-S24 94.7GB / Maya-XS 73.4GB；视觉 1.14GB
+   - 社区 GGUF（glm5-next 架构）属 Maya 实验路径：`--gguf-dir` + `tools/iq_pack.py`；
+     只给 Maya 引擎用（`--glm-pack`），llama.cpp / vLLM / Strata 读不了这个 pack。
+
 
 11. MoE, Qwen3.6, Alibaba Cloud, Text + Image + Video
    - 基础工作, 速度优势
@@ -175,6 +185,48 @@ ln -sv DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf \
 hf download --local-dir ./DeepSeek-V4.1-Flash unsloth/DeepSeek-V4.1-Flash-1017-GGUF \
     dspark-DeepSeek-V4.1-Flash-1017-Q8_0.gguf
 ```
+
+```
+# 服务器下载 GLM-5.3-Flash Unsloth UD-Q3_K_XL（147.5GB；ModelScope；2026-11-24）
+# 选型：Maya 自家的 Maya-M（116GB）在 HF 经 hf-mirror 只有 ~5MB/s，116GB 要 6h+；
+#       ModelScope 的 unsloth 镜像单文件 16 连接实测 ~87-94MB/s，147.5GB ~30min。
+# 兼容性：Maya 的 iq_pack 认 glm5-next / glm5next 架构（社区 GGUF 属实验性，未做质量实测），
+#       run config 用 --glm-pack（pack 由 tools/iq_pack.py 生成）。
+D=/data/huggingface-downloads/GLM-5.3-Flash-GGUF
+mkdir -p "$D/UD-Q3_K_XL"
+BASE=https://modelscope.cn/models/unsloth/GLM-5.3-Flash-GGUF/resolve/master/UD-Q3_K_XL
+
+for i in 1 2 3 4; do
+  n=$(printf '%05d' "$i")
+  f=GLM-5.3-Flash-UD-Q3_K_XL-$n-of-00004.gguf
+  aria2c -x16 -s16 -k4M --file-allocation=none --continue=true --max-tries=0 \
+    -d "$D/UD-Q3_K_XL" -o "$f" "$BASE/$f" &
+done
+wait
+
+# 校验：split.count=4，architecture=glm5-next；文件大小见下表（sha256 未在 ModelScope 列出，
+# 用 pack + 首跑作为完整性校验；需要 sha 时可对 HF 同名文件（unsloth/GLM-5.3-Flash-GGUF）比对）
+ls -l "$D/UD-Q3_K_XL"
+# 实测：2026-11-24 15:59-16:30 下完（~69MB/s），147.5GB；
+#       maya-pack glm 15 秒；首载 14.3 分钟；decode 58-65 tok/s，专家 100% 在 VRAM（2 卡）
+```
+
+| 文件 | 字节 | 说明 |
+| --- | ---: | --- |
+| `UD-Q3_K_XL/...-00001-of-00004.gguf` | 9,429,984 | 纯元数据 + tokenizer（shard 1） |
+| `UD-Q3_K_XL/...-00002-of-00004.gguf` | 49,609,243,584 | shard 2 |
+| `UD-Q3_K_XL/...-00003-of-00004.gguf` | 49,623,486,016 | shard 3 |
+| `UD-Q3_K_XL/...-00004-of-00004.gguf` | 48,293,762,496 | shard 4 |
+
+* 模型：`unsloth/GLM-5.3-Flash-GGUF` revision `master`（ModelScope 镜像；HF 原仓库同名）。
+* 目录：`/data/huggingface-downloads/GLM-5.3-Flash-GGUF/`（pack 生成在 `UD-Q3_K_XL/pack/`，见 `docs/maya.md`）。
+* 账本：147.5GB；2×PRO6000 96G（~205GB 可用）+ ≤100GB 内存，显存余量 ~57GB；无 Engram 表。
+* 同仓库其它量化（ModelScope 实测大小）：UD-IQ2_XXS 101.8GB、UD-IQ3_XXS 120.4GB、
+  **UD-Q3_K_XL 147.5GB（本次选）**、UD-Q4_K_XL 199.7GB（2 卡只剩 ~5GB 余量，不建议）、
+  UD-Q5_K_XL 240.3GB / UD-Q6_K_XL 291.8GB / Q8_0 341.0GB（超 2 卡）。
+* Maya 自家量化（peasantsmith）：Maya-S 96.5GB / Maya-M 116GB / Maya-L 156.3GB；
+  HF 经 hf-mirror 太慢，本次放弃；turboderp EXL3（3.05/4.05bpw）在 ModelScope 只有
+  cal_trace，量化文件不在镜像里（HF 才有，Maya 原生支持 `--model EXL3-3.05bpw`）。
 
 ```
 # PC Qwen3.6 MoE

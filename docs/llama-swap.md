@@ -87,7 +87,7 @@ llama-swap-start.sh                           # 启动脚本
 | `qwen3.8-27b-q8-256k` | llama.cpp | GGUF UD-Q8_K_XL + mmproj |
 | `qwen3.8-27b-fp8-1m` | vLLM（YaRN） | FP8 |
 | `qwen3.8-flash-next-fp4-1m` | vLLM（YaRN） | NVFP4（1M 上下文，TP2） |
-| `deepseek-v4.1-flash-iq2-512k` | strata dsv41 | ISTA-DAS IQ2_XXS + Engram + DSpark |
+| `glm-5.3-flash-q3-1m` | Project Maya | Unsloth Q3_K_XL（GLM-5.3-Flash，1M） |
 | `qwen3.8-flash-next-iq3-1m` | strata flash_next | ISTA-DAS IQ3_XXS（1M，视觉已启用） |
 
 已归档 7 条目（2026-11-16）：cmd 与实测冻结于对应模型文档
@@ -101,7 +101,7 @@ llama-swap-start.sh                           # 启动脚本
   （两组可并存）。`qwen3.8-flash-next-fp4-1m` 带 numactl NUMA 绑定，
   node 编号须与所选卡所在 socket 一致（见下文「NUMA / CPU 绑定」）。
 * `routing` 两个 group 与家族对应：group1 = 27B 家族（2 条目），
-  group2 = 4,6 卡系（FP4 vLLM 1M + 两个 strata 条目，共 3 条目）；
+  group2 = 4,6 卡系（FP4 vLLM 1M + Maya GLM 条目 + strata Qwen 条目，共 3 条目）；
   组内换模型即卸载，两组可并存。
 
 vLLM / SGLang 后端的参数要点见 `docs/vllm.md` / `docs/sglang.md`。
