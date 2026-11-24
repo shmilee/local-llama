@@ -1,14 +1,15 @@
 # local-llama
 
-本地 LLM 推理环境：[pixi](https://pixi.sh) 管理 llama.cpp / vLLM / SGLang
-三种推理后端，[llama-swap](https://github.com/mostlygeek/llama-swap)
-做多模型/多后端路由（OpenAI 兼容 API）。
+本地 LLM 推理环境：[pixi](https://pixi.sh) 管理 llama.cpp / vLLM / SGLang /
+stable-diffusion.cpp / Strata / Project Maya 等推理后端，
+[llama-swap](https://github.com/mostlygeek/llama-swap) 做多模型/多后端路由
+（OpenAI 兼容 API）。
 
 ## 目录结构
 
 ```
 .envrc                     direnv：pixi/rattler 缓存隔离到项目专属目录
-pixi.toml / pixi.lock      pixi 环境定义（三个推理环境）+ lock
+pixi.toml / pixi.lock      pixi 环境定义（各推理后端）+ lock
 scripts/                   pixi task 脚本（build/verify/prepare）
 config/                    llama-swap 配置文件（PRO6000 / T14p）
 llama-swap-start.sh        llama-swap 启动脚本
@@ -28,11 +29,14 @@ TODO.md                    待办跟踪
 pixi install -e llamacpp-cuda     # llama.cpp（CUDA，源码编译）
 pixi install -e vllm-cuda         # vLLM（PyPI + torch cu130）
 pixi install -e sglang-cuda       # SGLang（PyPI + torch cu130）
+pixi install -e strata-cuda        # Strata（源码构建，Qwen/DeepSeek）
+pixi install -e maya-cuda          # Project Maya（源码构建，GLM/DeepSeek）
 
 # 2. 验证
 pixi run -e llamacpp-cuda  llamacpp-build && pixi run -e llamacpp-cuda  llamacpp-verify
 pixi run -e vllm-cuda      vllm-cuda-verify
 pixi run -e sglang-cuda    sglang-cuda-verify
+pixi run -e maya-cuda      maya-build && pixi run -e maya-cuda maya-verify
 
 # 3. 启动路由服务
 ./llama-swap-start.sh -n PRO6000 -p 12435
@@ -48,6 +52,7 @@ pixi run -e sglang-cuda    sglang-cuda-verify
 | [docs/vllm.md](docs/vllm.md) | vLLM 启动参数、工具链要点、已知坑 |
 | [docs/sglang.md](docs/sglang.md) | SGLang 启动参数、混合注意力（GDN）要点 |
 | [docs/strata.md](docs/strata.md) | Strata 引擎（dsv41 / flash_next）pack、实测、llama-swap 集成 |
+| [docs/maya.md](docs/maya.md) | Project Maya 环境（GLM-5.3-Flash / DeepSeek）构建、pack、服务与 llama-swap 集成 |
 | [docs/sd.cpp.md](docs/sd.cpp.md) | stable-diffusion.cpp（T2I）安装、构建选项、sd-server 端点 |
 | [docs/models.md](docs/models.md) | 模型挑选、量化说明、下载记录、chat templates（候选池） |
 | [docs/models/](docs/models/README.md) | 模型资产文档：状态、实测快照、决策记录（结构已定，内容待迁移） |

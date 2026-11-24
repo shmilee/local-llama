@@ -27,6 +27,12 @@
 #   pixi run -e strata-cuda strata-verify  # 验证安装（--version + GPU 检测 + python 依赖）
 #   pixi run -e strata-cuda strata-path    # 打印 strata-engine 绝对路径
 #
+#   pixi install -e maya-cuda              # 安装 Project Maya CUDA 环境（DeepSeek 引擎 + Python 服务）
+#   pixi run -e maya-cuda maya-build       # 下载源码并编译 + 安装（引擎/服务到 $CONDA_PREFIX）
+#   pixi run -e maya-cuda maya-verify      # 验证安装（--version + GPU 自检 + python 依赖）
+#   pixi run -e maya-cuda maya-pack        # 从已下载的模型目录生成 DeepSeek pack
+#   pixi run -e maya-cuda maya-path        # 打印 maya 启动器绝对路径
+#
 #   pixi install -e vllm-cuda              # 安装 vLLM 环境（PyPI 最新版 + torch cu130）
 #   pixi run -e vllm-cuda vllm-cuda-prepare      # 整理 pip nvidia 包为标准 CUDA toolkit 布局
 #   pixi run -e vllm-cuda vllm-cuda-verify       # 验证安装（import/CUDA + 工具链 + flashinfer JIT）
@@ -375,6 +381,124 @@ tqdm = "==4.70.1"
 
 
 # ============================================================
+# Feature: Project Maya 公共基础
+#
+# 结构与 strata-base 对齐。Maya 的 DeepSeek 引擎 maya-ds4 与 Strata
+# dsv41 同血脉（上游从 Maya 移植），但模型格式互不通用：Maya 吃自家
+# GGUF / Unsloth GGUF / EXL3，不吃 ISTA-DAS 的 GSQ-RCO。
+#
+# 上游把引擎和服务放在源码树里（build/maya-ds4 + maya.py + serve/），
+# maya.py 以自身位置定 ROOT，并在 start 时检查 build/MAYA-BUILD.json
+# 决定是否重编。因此安装策略是：整棵源码树拷到 $CONDA_PREFIX/maya，
+# 引擎装进它的 build/（不写 MAYA-BUILD.json，避免 llama-swap 启动时
+# 触发意外重编译），bin/maya 只是环境 python 的启动器。
+# ============================================================
+[feature.maya-base.dependencies]
+cmake = ">=3.24"
+ninja = ">=1.11"
+curl = "*"
+gcc_linux-64 = ">=13"
+gxx_linux-64 = ">=13"
+libgomp = "*"
+# 上游 CMake 无 install 规则：maya-build.sh 手动拷贝二进制后，用
+# patchelf 把 RPATH 设为环境内 CUDA 运行库（$ORIGIN/../../lib）。
+patchelf = "*"
+
+[feature.maya-base.activation.env]
+CMAKE_PREFIX_PATH = "$CONDA_PREFIX"
+
+# Maya 版本号（对应 GitHub release tag；引擎 --version 里的 release）
+# 说明：上游 VERSION 文件是引擎/服务版本（1.1.76），tag 同名 v1.1.76。
+MAYA_VERSION = "v1.1.76"
+# MAYA_BUILD_DIR 为可选覆盖项（maya-build.sh 默认 build-$BACKEND）
+
+[feature.maya-base.tasks]
+# 下载 + 解压源码到 download/（幂等）；同时预取 CMake 需要的
+# llama.cpp pin（3cf03257，与 strata-src 同一个 commit）
+maya-src = "bash $PIXI_PROJECT_ROOT/scripts/maya-src.sh"
+
+# 打印 maya 启动器绝对路径（maya-build 装到 $CONDA_PREFIX/bin）
+maya-path = "which maya"
+
+# 从已下载的 DeepSeek 模型目录生成 pack（产物在模型目录的 maya-ds4/，
+# 需模型目录可写；目标目录可由 $MAYA_DS4_MODEL_DIR 覆盖）
+maya-pack = "bash $PIXI_PROJECT_ROOT/scripts/maya-pack.sh"
+
+# 编译 + 安装（源码树/引擎/服务安装到 $CONDA_PREFIX）
+[feature.maya-base.tasks.maya-build]
+depends-on = ["maya-src"]
+cmd = "bash $PIXI_PROJECT_ROOT/scripts/maya-build.sh"
+
+# 验证安装：bin + --version + GPU 自检 + python 依赖
+[feature.maya-base.tasks.maya-verify]
+cmd = "bash $PIXI_PROJECT_ROOT/scripts/maya-verify.sh"
+
+
+# ============================================================
+# Feature: Project Maya (CUDA, 源码编译)
+#
+# 依赖链与 strata-cuda 相同。Maya 的 DS4 引擎 include 了
+# cuda_profiler_api.h（ds4_main.cpp），GLM 路径还用 NVTX
+# （nvtx3/nvToolsExt.h），所以除 nvcc/cudart/cublas 外补
+# cuda-profiler-api 与 cuda-nvtx 两个 conda 拆分包。
+#
+# 只构建 DeepSeek 引擎 maya-ds4 + 诊断程序 strata-device：
+# Qwen3.8-Flash-Next 仍走 strata-cuda，避免重复构建 maya 主引擎。
+# ============================================================
+[feature.maya-cuda]
+platforms = ["linux-64-cu13"]
+
+[feature.maya-cuda.dependencies]
+# --- CUDA 编译栈（conda-forge 拆分包，pin 到 13.2 匹配平台声明）---
+cuda-version = "=13.2"
+# nvcc 编译器（$CONDA_PREFIX/bin/nvcc）
+cuda-nvcc = "*"
+# CUDA Runtime（maya_core / maya_kernels 链接 CUDA::cudart）
+cuda-cudart-dev = "*"
+# cuBLAS（maya_kernels 链接 CUDA::cublas；cublasLt 随 libcublas-dev 提供）
+libcublas-dev = "*"
+# ds4_main.cpp 的 cuda_profiler_api.h（CUDA 13 拆分包）
+cuda-profiler-api = "*"
+# GLM 路径的 nvtx3/nvToolsExt.h（maya-ds4 不直接链接，但保留完整
+# 工具链，便于以后构建 maya 主引擎）。conda 的 cuda-nvtx 只带运行库，
+# 头文件用 NVIDIA 的 pip wheel 提供（见 pypi-dependencies + CPATH）。
+cuda-nvtx = "*"
+# --- Python 服务（maya.py / serve/）---
+python = "3.12.*"
+
+[feature.maya-cuda.activation.env]
+CUDACXX = "$CONDA_PREFIX/bin/nvcc"
+# 后端标识（maya-build / maya-verify 据此区分）
+MAYA_BACKEND = "cuda"
+# Python 服务入口（maya.py / serve / tools / data），maya-build 拷贝
+# 到此目录；bin/maya 启动器据此找到 maya.py
+PYTHONPATH = "$CONDA_PREFIX/maya"
+# maya.py 在 sys.prefix == sys.base_prefix（conda/pixi python 就是）
+# 时会 exec 到 maya.sh，自建 .venv 并丢掉环境包。MAYA_SH=1 跳过这条
+# 分支，固定用 pixi 环境的 python 与 site-packages。
+MAYA_SH = "1"
+# nvtx3/nvToolsExt.h 来自 pypi 的 nvidia-nvtx wheel（conda 包只有 .so）
+CPATH = "$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cu13/include"
+# 版本由 pixi 管理：关掉 dashboard 的 GitHub 更新检查（本机不可达）
+MAYA_UPDATE_CHECK = "0"
+
+[feature.maya-cuda.pypi-dependencies]
+# maya.py 的 preflight 依赖（setup.py PY_PACKAGES；python 3.12 分支）
+# 版本与 strata-cuda 的终端保持一致；jsonschema 为上游新增依赖。
+jinja2 = "==3.1.6"
+pyyaml = "==6.0.3"
+regex = "==2026.9.10"
+psutil = "==7.2.2"
+requests = "==2.34.2"
+numpy = "==2.5.3"
+pillow = "==12.3.0"
+tqdm = "==4.70.1"
+jsonschema = ">=4.18,<5"
+# nvtx3/nvToolsExt.h（GLM 引擎 maya 编译需要；版本与 CUDA 13.2 对齐）
+nvidia-nvtx = "==13.2.86"
+
+
+# ============================================================
 # Feature: vLLM (PyPI, CUDA 13 后端)
 #
 # 直接从 PyPI 安装（conda-forge 无对应包）。vLLM 严格 pin torch 版本，
@@ -521,5 +645,6 @@ llamacpp-vulkan = { features = ["llama-base", "llamacpp-vulkan"], solve-group = 
 sdcpp-vulkan = { features = ["sdcpp-base", "sdcpp-vulkan"], solve-group = "sdcpp-vulkan" }
 sdcpp-cuda = { features = ["sdcpp-base", "sdcpp-cuda"], solve-group = "sdcpp-cuda" }
 strata-cuda = { features = ["strata-base", "strata-cuda"], solve-group = "strata-cuda" }
+maya-cuda = { features = ["maya-base", "maya-cuda"], solve-group = "maya-cuda" }
 vllm-cuda = { features = ["vllm-cuda"], solve-group = "vllm-cuda" }
 sglang-cuda = { features = ["sglang-cuda"], solve-group = "sglang-cuda" }

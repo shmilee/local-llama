@@ -1,6 +1,6 @@
 # pixi 环境
 
-`pixi.toml` 管理七个推理环境（llama.cpp / vLLM / SGLang / stable-diffusion.cpp / Strata），
+`pixi.toml` 管理八个推理环境（llama.cpp / vLLM / SGLang / stable-diffusion.cpp / Strata / Project Maya），
 全部源码或 PyPI 安装，系统依赖最小化（CUDA 环境仅依赖 NVIDIA 驱动）。
 
 ## 环境一览
@@ -14,6 +14,7 @@
 | `sdcpp-vulkan`   | `sdcpp-base` + `sdcpp-vulkan`    | Vulkan | conda 工具链 + sd.cpp 源码编译 |
 | `sdcpp-cuda`     | `sdcpp-base` + `sdcpp-cuda`      | CUDA   | conda 工具链 + sd.cpp 源码编译 |
 | `strata-cuda`    | `strata-base` + `strata-cuda`    | CUDA 13| conda 工具链 + Strata 源码编译（CUDA 引擎 + Python 终端） |
+| `maya-cuda`      | `maya-base` + `maya-cuda`        | CUDA 13| conda 工具链 + Project Maya 源码编译（maya / maya-ds4 + Python 服务） |
 
 ## 常用命令
 
@@ -50,6 +51,13 @@ pixi install -e strata-cuda
 pixi run   -e strata-cuda strata-build    # 下载源码 + 编译引擎 + 安装终端
 pixi run   -e strata-cuda strata-verify   # --version + GPU 检测/显存自检 + python 依赖
 pixi run   -e strata-cuda strata-path
+
+# Project Maya（CUDA 引擎 + Python 服务；GLM-5.3-Flash / DeepSeek-V4.1-Flash）
+pixi install -e maya-cuda
+pixi run   -e maya-cuda maya-build     # 下载源码 + 编译 + 安装
+pixi run   -e maya-cuda maya-verify    # --version + GPU 自检 + Python 依赖
+pixi run   -e maya-cuda maya-pack glm <模型目录>   # 生成 GLM pack
+pixi run   -e maya-cuda maya-path
 ```
 
 verify 脚本缺 CUDA 布局时会自动调用 prepare。
