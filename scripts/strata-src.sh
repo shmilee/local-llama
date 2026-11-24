@@ -47,7 +47,7 @@ fi
 # --- 旧版（v0.2.4.2 等）的 ggml 来自 CMake FetchContent 的 llama.cpp
 #     （GIT_REPOSITORY 指向 github.com，构建机不可达）：预下载 pinned
 #     commit 的 tarball，strata-build.sh 用 FETCHCONTENT_SOURCE_DIR_* 指过去
-if grep -q "FetchContent_Declare(strata_llamacpp" "$SRC_DIR/CMakeLists.txt"; then
+if [ -f "$SRC_DIR/CMakeLists.txt" ] && grep -q "FetchContent_Declare(strata_llamacpp" "$SRC_DIR/CMakeLists.txt"; then
     GG_COMMIT=$(grep -oE "GIT_TAG [0-9a-f]{40}" "$SRC_DIR/CMakeLists.txt" | awk '{print $2}' | head -1)
     if [ -n "$GG_COMMIT" ]; then
         GG_DIR="$DL_DIR/llama.cpp-${GG_COMMIT:0:12}"

@@ -9,6 +9,7 @@
   "cwd": ".",
   "tokenizer": "strata-packs/qwen38fn-iq3xxs/tokenizer",
   "model_name": "qwen3.8-flash-next",
+  "aliases": ["qwen3.8-flash-next-iq3-1m", "Qwen3.8-Flash-Next-Strata"],
   "arch": "qwen4exp",
   "log": "logs/strata-qwen.log",
   "lib_dirs": [],

@@ -289,13 +289,14 @@ patchelf = "*"
 CMAKE_PREFIX_PATH = "$CONDA_PREFIX"
 
 # Strata 版本号（对应 GitHub release tag）
-# 注意：pin 在 v0.2.4.2（引擎 0.1.49.x）——v0.2.13（引擎 0.1.59.x）的
-# dsv41 长上下文 prefill 有 10× 回归（本机 A/B 2220→225 tok/s，
-# 0.1.50-0.1.59 窗口引入，flag 无法规避），见 docs/strata-prefill-regression.md
-# 与上游 issue #5520（Qwen 引擎的独立回归）。上游修复并复测通过后再升级。
-STRATA_VERSION = "v0.2.4.2"
-# 说明：CMake 的 project VERSION 是引擎内部版本（0.1.49.x），
-#       v0.2.4.2 是发布版本（tag / 安装器 / strata --version 语义的"应用版本"）
+# 0.2.14 起上游移除了 DeepSeek（dsv41）引擎（#6072/#6048），本环境只保留
+# 主引擎（flash_next 形状，Qwen3.8-Flash-Next）+ 图片编码器 + 终端。
+# v0.2.20（引擎 0.1.66）：0.2.14 起的自有 prompt 内核在 QFN 上实测比
+# 0.1.49.2 快（131k prefill 5,068 → 5,960 tok/s）。
+# DeepSeek-V4.1 的引擎改用独立环境（Project Maya，见 maya-* 任务）。
+STRATA_VERSION = "v0.2.20"
+# 说明：CMake 的 project VERSION 是引擎内部版本（0.1.66），
+#       v0.2.20 是发布版本（tag / 安装器 / strata --version 语义的"应用版本"）
 # STRATA_BUILD_DIR 为可选覆盖项（strata-build.sh 默认派生 build-$BACKEND）
 
 [feature.strata-base.tasks]
@@ -307,9 +308,8 @@ strata-path = "which strata-engine"
 
 # 准备 run pack（strata-packs/，模型文件只读；缺 tokenizer/vocab.json 时
 # 终端拒绝启动）。all=两个都备（默认）；幂等，已完整跳过，--force 重建
-strata-pack = "bash $PIXI_PROJECT_ROOT/scripts/strata-pack.sh"
+strata-pack = "bash $PIXI_PROJECT_ROOT/scripts/strata-pack.sh qwen"
 strata-pack-qwen = "bash $PIXI_PROJECT_ROOT/scripts/strata-pack.sh qwen"
-strata-pack-ds41 = "bash $PIXI_PROJECT_ROOT/scripts/strata-pack.sh ds41"
 
 # 编译 + 安装（引擎/终端安装到 $CONDA_PREFIX，RPATH 相对定位 lib）
 # 后端由 $STRATA_BACKEND 自动区分（各 backend feature 单独定义）
