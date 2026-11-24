@@ -418,12 +418,13 @@ FLASHINFER_CUDA_ARCH_LIST = "12.0a"
 FLASHINFER_EXTRA_CUDAFLAGS = "-DCCCL_DISABLE_CTK_COMPATIBILITY_CHECK"
 
 [feature.vllm-cuda.pypi-dependencies]
-vllm = ">=0.33,<0.34"
+vllm = ">=0.34,<0.35"
 # vllm download-kernels（vllm-cuda-prepare 预拉 flashinfer 预编译 kernel）
 # 内部走 `python -m pip install`，pixi 环境默认不带 pip，须显式安装。
 pip = "*"
-# torch 系四件套：版本与 vLLM 的 pin 一致（0.33: torch 2.14.0 /
-# torchvision 0.29.0 / torchaudio 2.11.0 / torchcodec>=0.14）。
+# torch 系四件套：版本与 vLLM 的 pin 一致（0.33/0.34 均 pin torch 2.14.0 /
+# torchvision 0.29.0 / torchaudio 2.11.0 / torchcodec>=0.14，故 0.34 升级
+# torch 系无需变动）。
 # cu130 wheel 通过 workspace 级 [pypi-options] 的 find-links 从国内镜像取
 # （等价 pip --find-links），不走 index。
 torch = { version = "==2.14.0+cu130" }

@@ -4,12 +4,92 @@
 安装与验证见 `docs/pixi-environments.md`。
 recipe 参考: <https://recipes.vllm.ai/Qwen/Qwen3.8-27B?hardware=rtx_pro_6000>
 
-## 版本 pin（vLLM 0.33.0）
+## 版本 pin（vLLM 0.34.0）
 
 * 严格 pin `torch==2.14.0 / torchaudio==2.11.0 / torchvision==0.29.0 / torchcodec>=0.14`
-  （cu130 构建，`+cu130` 本地版本号）。
+  （cu130 构建，`+cu130` 本地版本号；0.33 与 0.34 的 torch 系 pin 相同）。
+* `flashinfer-python==0.7.3`（0.33 为 0.7.2.post1）、`transformers>=5.16.1,<5.23.0`。
+* **`huggingface_hub>=2.0.0`（大版本跳 2.x）**、`tokenizers>=0.23.3`、
+  `mistral-common>=1.13.0`（0.34 新硬依赖，由 vllm pin 自动带入）。
 * torch wheel 依赖的 `nvidia-*-cu13` pip 包自带 CUDA 运行时/头文件/nvcc，
   环境内不依赖系统 `/usr/local/cuda`，唯一系统依赖是 NVIDIA 驱动（`libcuda.so.1`）。
+
+## vLLM 0.34 升级注意事项（官方 release notes 核对）
+
+对照 [v0.34.0 release](https://github.com/vllm-project/vllm/releases/tag/v0.34.0)
+的 "Before you upgrade" 逐条核对，与本部署相关的：
+
+* **Extensible KV cache 默认开启，`gpu_memory_utilization` 缺省 1.0**（#56492）：
+  KV 池按 CUDA graph 捕获 + warmup 后的**实际空闲显存**计算（而非估算），
+  官方建议**不再显式设 `--gpu-memory-utilization`**；对保留 ≥1G 的显式
+  (0.8,1.0) 值会打 warning。trade-off：高并发（conc 128，H200 实测）单 token
+  decode 延迟可能 +6–18%；`--no-enable-extensible-kv-cache` 可退回旧行为。
+  **本部署是共享 GPU：config 保留原 gmu（27B-1M 0.9 / Flash-Next 0.95）
+  限制占用**——0.34 打 warning 但生效，同卡 A/B 实测对速率零影响、仅
+  KV 池 -13%（见下方「0.34 实测」）；独占卡可去掉 gmu 换 +10.6% KV 池。
+* **默认 `--block-size` 16 → 64**（#63231）：显式指定仍优先生效。本部署两个
+  vLLM 模型都是 mamba 混合（GDN），块大小由 mamba 状态自动抬到 1600，
+  默认值变化无影响；`--prefix-match-unit 64` 仍整除 1600。
+* **Model Runner V1 移除**（#63373）：`VLLM_USE_V2_MODEL_RUNNER` 设非 1 值
+  直接启动失败；本部署未使用该变量。
+* **Marlin W4A8（INT8/FP8 activation）路径移除**（#65542）：此类 checkpoint
+  改用 `--quantization humming` + `VLLM_HUMMING_INPUT_QUANT_CONFIG`（替代
+  `VLLM_MARLIN_INPUT_DTYPE`）。本部署 NVFP4 走 `--quantization modelopt`
+  （changelog 中 ModelOpt NVFP4 仍在演进，如 CSF 压缩 scale #64312），
+  理论不受影响——Flash-Next dummy 启动实测确认。
+* **NUMA best-effort 自动绑定默认开启**（#61258），`--no-numa-bind` 可关：
+  Flash-Next 条目外层已有 `numactl --cpunodebind=1`，vLLM 的自动绑定应感知
+  既有 affinity；实测观察启动日志有无冲突。
+* QuTLASS/`fp_quant`、Keye-VL、ROCm 7.2 产物移除：均未使用。
+* 性能亮点（1.95× decode、1.6× 吞吐、TTFT 1.24–1.40×）均标在
+  GB200/GB300/H200/MI355X 上，**SM120（RTX PRO 6000）无专项提速**；
+  通用项里 `idle sampler writes skipped`（#62748，small-batch decode
+  ~10–11%）对单用户场景可能有小幅 decode 收益，见下方实测。
+
+## 0.34 实测（2026-11-24，PRO6000 x8）
+
+### Qwen3.8-27B-FP8 单卡 TP1（YaRN 1M + MTP3 + fp8 KV，A/B 同一配置）
+
+| 指标 | 0.33（`--gpu-memory-utilization 0.9`） | 0.34（extensible KV，不设 gmu） | 变化 |
+|---|---|---|---|
+| KV 池 | 1,606,531 tokens | 1,777,604 tokens | **+10.6%** |
+| 1M 并发 | 1.61x | 1.78x | +10.6% |
+| prefill（109,166 tok 唯一 prompt） | TTFT 20.64s ≈ 5,290 t/s | TTFT 20.54s ≈ 5,314 t/s | **持平** |
+| decode（streaming，MTP 生效） | 78.3 t/s | 81.2 t/s | **+3.7%** |
+
+* SM120 无 prefill 提速，与 release notes 定位一致；decode 小幅上涨
+  （方向与通用项 #62748 一致，幅度未达其宣称的 10–11%）。
+* 实际收益是 KV 池 +10.6%（extensible KV 按 warmup 后真实空闲显存计算）。
+* 0.34 默认显存占用贴近整卡（27B-1M 实测 ~95G）：**要限制占用**加回
+  `--gpu-memory-utilization 0.9`（0.34 打 warning 但生效）或
+  `--disable-extensible-kv-cache` 退回旧行为。同卡 A/B 实测（0.34，
+  GPU4）：gmu 0.9 **对速率零影响**——prefill TTFT 20,976ms vs
+  20,984ms（109k tok），decode 逐位相同 81.2 t/s；唯一代价是 KV 池
+  1,777,604 → 1,547,433 tokens（-13%，1M 并发 1.78x → 1.55x）。
+  0.34 官方 warning 原意：gmu 只在需要给「vLLM 测不到的显存」留余量时
+  设（同卡其他进程、权重传输缓冲等）——共享 GPU 场景适用，独占卡建议
+  不设。
+* 启动变化：attention 候选变为 `['FLASHINFER', 'TRITON_ATTN']`；
+  `VLLM_USE_BREAKABLE_CUDAGRAPH=1` 自动启用；单卡时 vLLM 自行
+  `numactl --cpunodebind=<GPU 所在 node>`（best-effort，日志可查）。
+
+### Flash-Next NVFP4 TP2（`--load-format dummy` 快速启动验证）
+
+* 0.34 启动通过：`MARLIN NvFp4 MoE backend` ✓（W4A8 marlin 移除不影响
+  modelopt NVFP4）、PLE 表 pinned CPU ✓、1M YaRN ✓、CUDA graph
+  FULL+PIECEWISE ✓。dummy KV 池 3,996,865 tokens（真实权重略低，
+  0.30 实测 3,819,165）。
+* `VLLM_PLE_CPU_OFFLOAD` **废弃**：0.34 报 unknown variable，PLE offload
+  改为 `EngramConfig`（`--engram-config`），`cpu_offload` 默认 True
+  （行为不变），config 已删该 env。
+* 外层 `numactl --cpunodebind=1` 与 0.34 自动 NUMA 绑定不冲突：
+  日志 `Automatic NUMA binding unavailable on this host; starting unbound`
+  （进程已绑定时跳过）。
+* **坑（非 0.34 bug）**：首次 dummy 启动失败且 worker 无 root-cause 栈
+  （`WorkerProc initialization failed due to an exception in a background
+  process`）——当时同一环境正有 pip 并发执行 `vllm download-kernels`
+  替换 flashinfer 包。**引擎启动期间不要在同一环境跑 pip
+  install/uninstall**。
 
 ## 启动参数（Qwen3.8-27B-FP8，单卡 96G TP1）
 
@@ -110,10 +190,13 @@ routed experts——注意力、GDN、共享专家、lm_head、视觉编码器�
 
 核心机制——PLE 走 CPU、其余上 GPU：
 
-* `VLLM_PLE_CPU_OFFLOAD=1`（vLLM 0.30 默认开启）：PLE 表驻留 pinned host
-  内存，GPU 经 UVA 异步预取行（架构上 N-gram 层就放在 layer 2，取数与
-  layer 1 计算重叠）。host 内存需 51GB 余量（该表按 ETP 切分，TP>1 时
-  每 rank 只需一部分：TP2 实测 ~36G/rank，见「长上下文」节）。
+* PLE CPU offload：0.30–0.33 由 `VLLM_PLE_CPU_OFFLOAD=1` 控制（默认开启）；
+  **0.34 起该 env 废弃**（报 unknown variable），改为 `EngramConfig`
+  （`--engram-config`），`cpu_offload` 默认 True，行为不变，config 已删
+  该 env。机制不变：PLE 表驻留 pinned host 内存，GPU 经 UVA 异步预取行
+  （架构上 N-gram 层就放在 layer 2，取数与 layer 1 计算重叠）。host 内存
+  需 51GB 余量（该表按 ETP 切分，TP>1 时每 rank 只需一部分：TP2 实测
+  ~36G/rank，见「长上下文」节）。
 * GPU 放 ~74.75 GiB 权重，其余留给 KV/激活/CUDA graph。单卡 96G 实测
   （gmu 0.95、bf16 KV、max-num-seqs 4、MTP3）：KV 池 10.17 GiB ≈ 357k
   tokens，262k 上下文并发 1.36x。单用户足够（并发受上下文长度限制，

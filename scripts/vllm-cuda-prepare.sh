@@ -50,6 +50,40 @@ fi
 NVCC_VER=$("$ROOT/bin/nvcc" --version 2>/dev/null | grep -oP 'release \K[0-9.]+' | head -1)
 echo "CUDA_HOME ready: $ROOT (nvcc ${NVCC_VER:-unknown})"
 
+# --- flashinfer 预编译 kernel 包清理（vLLM >=0.33 / flashinfer 0.7.x 升级必需）---
+# download-kernels 是 ad-hoc pip 安装（不在 pixi 管理内）。vllm/flashinfer
+# 升级后，旧版本残留会破坏 flashinfer import：
+#   * 旧版 flashinfer-jit-cache shim 无 __version__ 属性 → 0.7.3 直接
+#     AttributeError（2026-11 实测）；
+#   * 中断的 pip 安装会留下孤儿模块目录（dist-info 已无、目录还在），
+#     同样被 import 命中。
+# 故预拉前先：1) 卸载主版本与 flashinfer-python 不符的 kernel 包
+# （flashinfer-cubin / flashinfer-jit-cache*，绝不动 flashinfer-python 本身）；
+# 2) 若某类 kernel 包已全卸，删掉其孤儿模块目录。
+FP_VER=$(python -m pip show flashinfer-python 2>/dev/null | awk '/^Version:/{print $2}')
+if [ -n "$FP_VER" ]; then
+    for dist in $(python -m pip list --format=freeze 2>/dev/null | cut -d= -f1 \
+                 | grep -E '^flashinfer-(cubin|jit-cache)' || true); do
+        dver=$(python -m pip show "$dist" 2>/dev/null | awk '/^Version:/{print $2}')
+        case "$dver" in
+            "" | "$FP_VER"*) : ;;  # 版本一致（含 +cuXXX 本地标签）
+            *) echo "卸载过期 flashinfer kernel 包: $dist ($dver, 环境为 $FP_VER)"
+               python -m pip uninstall -y "$dist" >/dev/null ;;
+        esac
+    done
+    SP_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
+    if ! python -m pip list --format=freeze 2>/dev/null | cut -d= -f1 \
+         | grep -qE '^flashinfer-jit-cache'; then
+        for d in "$SP_DIR"/flashinfer_jit_cache "$SP_DIR"/flashinfer_jit_cache_sm*; do
+            [ -e "$d" ] && { echo "清理孤儿模块目录: ${d##*/}"; rm -rf "$d"; }
+        done
+    fi
+    if ! python -m pip list --format=freeze 2>/dev/null | cut -d= -f1 \
+         | grep -qE '^flashinfer-cubin'; then
+        [ -e "$SP_DIR/flashinfer_cubin" ] && { echo "清理孤儿模块目录: flashinfer_cubin"; rm -rf "$SP_DIR/flashinfer_cubin"; }
+    fi
+fi
+
 # 预拉取 flashinfer 预编译 kernel（vLLM >=0.33 的官方方式，幂等）：
 #   flashinfer-cubin（~1.6GB，GitHub release）+ flashinfer-jit-cache。
 # 不预拉时首次启动退化为 JIT 编译，多花几分钟（功能等价）。

@@ -529,6 +529,11 @@ models:
     cmd: |
       ${default-vllm}
       ${models_dir}/Qwen3.8-27B-FP8
+      # vLLM 0.34 起 extensible KV cache 默认开启（gmu 缺省 1.0、KV 池
+      # 贴近整卡）。共享 GPU 上保留显式 gmu 限制占用：0.34 打 warning
+      # 但生效；0.34 同卡 A/B 实测对速率零影响（prefill TTFT 20,976 vs
+      # 20,984 ms @109k tok，decode 逐位相同 81.2 t/s），仅 KV 池 -13%
+      # （详见 docs/vllm.md「0.34 实测」节）。
       --max-model-len ${ctx_1m}
       --gpu-memory-utilization 0.9
       --hf-overrides '{"text_config":{"rope_parameters":{"mrope_interleaved":true,"mrope_section":[11,11,10],"rope_type":"yarn","rope_theta":10000000,"partial_rotary_factor":0.25,"factor":4.0,"original_max_position_embeddings":262144}}}'
@@ -589,15 +594,19 @@ models:
       --quantization modelopt
       --tensor-parallel-size 2
       --mm-encoder-tp-mode data
-      --gpu-memory-utilization 0.95
+      # 同 27B-1M 条目：共享 GPU 上保留显式 gmu（0.95）限制占用；0.34
+      # 打 warning 但生效，实测对速率无影响（docs/vllm.md 0.34 实测节）。
       --max-model-len ${ctx_1m}
+      --gpu-memory-utilization 0.95
       --hf-overrides '{"text_config":{"rope_parameters":{"mrope_interleaved":true,"mrope_section":[11,11,10],"rope_type":"yarn","rope_theta":10000000,"partial_rotary_factor":0.25,"factor":4.0,"original_max_position_embeddings":262144}}}'
       --max-num-seqs 6
       --max-num-batched-tokens 16384
       --enable-prefix-caching
       --moe-backend marlin
       --attention-config.indexer_kv_dtype fp8
-      --no-enable-flashinfer-autotune
+      # vLLM 0.34 起 --no-enable-* 命名全部改为 --disable-*（旧名直接报
+      # unrecognized argument）。
+      --disable-flashinfer-autotune
       --enable-per-request-metrics
       --enable-prompt-tokens-details
       --enable-auto-tool-choice
@@ -605,7 +614,9 @@ models:
       --reasoning-parser qwen3
     env:
       - "CUDA_VISIBLE_DEVICES=4,6"
-      - "VLLM_PLE_CPU_OFFLOAD=1"
+      # vLLM 0.34：VLLM_PLE_CPU_OFFLOAD 已废弃（未知变量 warning），PLE
+      # CPU offload 改为 EngramConfig，cpu_offload 默认 True（行为不变，
+      # 可用 --engram-config 覆盖），故删除该环境变量。
       - "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1"
     description: "MoE model (125B/6B active) from Aliyun Qwen, NVFP4, vLLM backend, YaRN 1M context (TP2)"
     aliases:
