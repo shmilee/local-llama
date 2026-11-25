@@ -73,12 +73,26 @@ recipe 参考: <https://recipes.vllm.ai/Qwen/Qwen3.8-27B?hardware=rtx_pro_6000>
   `VLLM_USE_BREAKABLE_CUDAGRAPH=1` 自动启用；单卡时 vLLM 自行
   `numactl --cpunodebind=<GPU 所在 node>`（best-effort，日志可查）。
 
-### Flash-Next NVFP4 TP2（`--load-format dummy` 快速启动验证）
+### Flash-Next NVFP4 TP2（`--load-format dummy` 快速验证，生产 TP2 配置）
 
 * 0.34 启动通过：`MARLIN NvFp4 MoE backend` ✓（W4A8 marlin 移除不影响
   modelopt NVFP4）、PLE 表 pinned CPU ✓、1M YaRN ✓、CUDA graph
-  FULL+PIECEWISE ✓。dummy KV 池 3,996,865 tokens（真实权重略低，
-  0.30 实测 3,819,165）。
+  FULL+PIECEWISE ✓。
+* KV 池：gmu 0.95（生产配置）dummy 实测 3,821,316 tokens（0.30 真实
+  权重 3,819,165，基本一致）；不设 gmu 时 3,996,865。
+* **速率（dummy 权重，计算路径与真实权重相同；TP2 无 MTP，同 0.30
+  配置）**，2026-11-24 实测：
+
+  | 指标 | 0.34（dummy） | 0.30 参考（真实权重，docs 旧数据） |
+  |---|---|---|
+  | prefill（109,166 tok 唯一 prompt） | TTFT 8.11s ≈ **13.5k t/s** | 8.5k–12.2k t/s（705k 深度尾部，不可直接比） |
+  | decode（256 tok streaming，确定性） | **132.2 t/s** | ~117 t/s（**+13%**，跨两个版本） |
+
+  * decode 提升来自 0.33/0.34 的通用优化（#62748 等），未单独对
+    0.33 做 TP2 基线。
+  * 待办（非本次范围）：0.34 移除了 marlin W4A8（0.30 时 TP2+MTP 失败
+    的路径），TP2 下 MTP 是否可用值得单独验证——若可用，decode 还有
+    进一步提升空间（参考 262k 单卡 MTP3 的 135.6 t/s）。
 * `VLLM_PLE_CPU_OFFLOAD` **废弃**：0.34 报 unknown variable，PLE offload
   改为 `EngramConfig`（`--engram-config`），`cpu_offload` 默认 True
   （行为不变），config 已删该 env。
