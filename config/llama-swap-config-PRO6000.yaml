@@ -719,6 +719,63 @@ models:
       context: 1048576
     sendLoadingState: true
 
+  # 5v. Inkling-2-Mini · NVFP4 —— vLLM 后端 @ 262k，单卡
+  # - 模型：thinkingmachines/Inkling-2-Mini（apache-2.0），looped MoE
+  #   （26B 总参 / 3.5B 激活）：prelude 6 层 + core 12 层 × 3 pass + coda 6 层
+  #   = 48 次层访问，48 个独立 KV cache（~192KiB/tok @bf16，KV 是同规格模型的
+  #   两倍量级）；128 专家 top-8，文本 + 图片输入；捆绑 DSpark 投机
+  #   （mtp.safetensors 606M，同 checkpoint 内）
+  # - 依据：官方 recipe https://recipes.vllm.ai/thinkingmachines/Inkling-2-Mini
+  #   （default 变体 NVFP4，TP1；1M 上下文仅 GB200 186G 单卡验证，96-128G 档
+  #   H100/Spark 限 262,144，本条从之）
+  # - 需要 vLLM >= 0.35（0.35 未发布，nightly）：vllm-cuda 环境当前 0.34，
+  #   升级前本条目启动会失败（inkling2_loop 架构稳定版不支持），见 docs/vllm.md
+  # - 显存预算：权重 19.5G + mtp 0.6G + 262k KV ~48G（bf16）≈ 68G < 96G
+  # - GPU 3（node 0，不共卡）：group1 用 2、group2 用 4,6，均避开 CUDA0
+  #   （防 CLIP 误用）
+  "inkling-2-mini-fp4-262k":
+    useModelName: "${models_dir}/Inkling-2-Mini"
+    cmd: |
+      pixi run -m ${env.LOCAL_LLAMA_HOME} -e vllm-cuda vllm serve
+      ${models_dir}/Inkling-2-Mini
+      --host 127.0.0.1 --port ${PORT}
+      # 官方 recipe dgx_spark_gb10 变体（TP1 + 262k 上限，96-128G 档验证值）
+      --tensor-parallel-size 1
+      --max-model-len ${ctx_256k}
+      --reasoning-parser inkling
+      --enable-auto-tool-choice
+      --tool-call-parser inkling
+      --speculative-config '{"method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic"}'
+      # llama-swap 指标与常用参数（其余同 default-vllm 宏；KV cache 默认 bf16，
+      # 未验证 fp8 KV 对 48 个 per-pass cache 的行为，不从宏继承 --kv-cache-dtype）
+      --enable-per-request-metrics
+      --enable-prompt-tokens-details
+      --per-request-spec-decode-metrics summary
+      --max-num-seqs 6
+      --sse-keep-alive-interval 15
+    env:
+      - "CUDA_VISIBLE_DEVICES=3"
+    description: "Looped MoE (26B/3.5B active) from Thinking Machines, NVFP4, vLLM nightly, DSpark spec decode, 262k ctx"
+    aliases:
+      - "Inkling-2-Mini"
+    metadata:
+      port: ${PORT}
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_256k}"
+    ttl: 36000
+    sendLoadingState: true
+    timeouts:
+      connect: 30
+      keepalive: 30
+      responseHeader: 600
+      tlsHandshake: 10
+      idleConn: 90
+    capabilities:
+      in: [text, image]
+      out: [text]
+      tools: true
+      reranker: false
+      context: 262144
+
 
 # hooks: a dictionary of event triggers and actions
 # - optional, default: empty dictionary
@@ -822,6 +879,14 @@ routing:
             - "glm-5.3-flash-q3-1m"
             - "qwen3.8-flash-next-iq3-1m"
 
+        # group3 = Inkling 家族（单卡 3）：组内换模型即卸载，与 group1/2 并存
+        "group3":
+          swap: true
+          exclusive: false
+          persistent: true
+          members:
+            - "inkling-2-mini-fp4-262k"
+
       # The matrix lists the model combinations that are allowed to run
       # concurrently. When a model is requested, the solver makes room for it
       # by evicting as few running models as possible, preferring to keep the
@@ -887,4 +952,5 @@ routing:
         # - higher priority requests are serviced first in the queue
         priority:
           qwen3.8-27b-fp8-1m: 10
+          inkling-2-mini-fp4-262k: 8
           qwen3.8-flash-next-fp4-1m: 6

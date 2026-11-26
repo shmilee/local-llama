@@ -79,6 +79,17 @@
           "capabilities": {
             "reasoning": { "supported": true }
           }
+        },
+        "inkling-2-mini-fp4-262k": {
+          "name": "Inkling-2-Mini · FP4 · 262k",
+          "limit": {
+            "context": 262144,
+            "input": 217777,
+            "output": 32768
+          },
+          "capabilities": {
+            "reasoning": { "supported": true }
+          }
         }
       }
     },

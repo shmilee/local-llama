@@ -67,6 +67,24 @@
      只给 Maya 引擎用（`--glm-pack`），llama.cpp / vLLM / Strata 读不了这个 pack。
 
 
+5. MoE, Inkling-2-Mini (26B 总参 / 3.5B 激活), Thinking Machines, Text + Image,
+   循环架构 + DSpark（2026-11 新模型，当前热点）
+    - looped MoE：prelude 6 层 + core 12 层 × 3 pass + coda 6 层 = 48 次层访问、
+      48 个独立 KV cache（~192KiB/tok @bf16）；128 专家 top-8；
+      checkpoint 原生 1M，GB200 单卡验证 1M，96-128G 档验证上限 262k
+    - <https://huggingface.co/thinkingmachines/Inkling-2-Mini>
+      + NVFP4（modelopt，官方唯一量化）：`model-00001-of-00001.safetensors` 19.5G、
+        `mtp.safetensors`（DSpark 投机草稿）606M，apache-2.0
+        - 混合精度：~94% 参数（24 层 MoE 专家 w13/w2）为 NVFP4（U8 打包 E2M1
+          + F8_E4M3 scale，block 16），注意力/embeddings/norms 保持 BF16；
+          safetensors 里 BF16 张量多不代表非 FP4 量化
+    - vLLM 需要 nightly（>=0.35，0.35 未发布；inkling2_loop 架构稳定版不支持）
+    - recipe: <https://recipes.vllm.ai/thinkingmachines/Inkling-2-Mini>
+      + `--reasoning-parser inkling --enable-auto-tool-choice --tool-call-parser inkling`
+      + `--speculative-config '{"method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic"}'`
+    - ModelScope 镜像 <https://modelscope.cn/models/thinkingmachines/Inkling-2-Mini>
+      （本次实测比 hf-mirror 快 ~35×，见下载记录）
+
 11. MoE, Qwen3.6, Alibaba Cloud, Text + Image + Video
    - 基础工作, 速度优势
    - <https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF> 或 <https://modelscope.cn/models/unsloth/Qwen3.6-35B-A3B-MTP-GGUF>
@@ -227,6 +245,39 @@ ls -l "$D/UD-Q3_K_XL"
 * Maya 自家量化（peasantsmith）：Maya-S 96.5GB / Maya-M 116GB / Maya-L 156.3GB；
   HF 经 hf-mirror 太慢，本次放弃；turboderp EXL3（3.05/4.05bpw）在 ModelScope 只有
   cal_trace，量化文件不在镜像里（HF 才有，Maya 原生支持 `--model EXL3-3.05bpw`）。
+
+```
+# 服务器下载 Inkling-2-Mini NVFP4（2026-11-26，合计 ~20.2GB）
+# 选型：NVFP4（modelopt）是官方仓库唯一发布量化：19.5G 单文件权重 + 606M DSpark
+#       草稿，apache-2.0；需 vLLM >= 0.35（nightly，未发布），本次只下载并登记
+#       条目，待 vllm-cuda 环境升级后首跑验证（docs/models/Inkling-2-Mini.md）。
+# 速度：hf-mirror 对本仓库仅 ~0.3MB/s（20GB 要 18h+）；ModelScope 单连接
+#       ~10.5MB/s（~31min），故选 ModelScope（lim 无 sudo 装不了 aria2c）。
+D=/data/huggingface-downloads/Inkling-2-Mini
+mkdir -p "$D"
+python3 -c "from modelscope import snapshot_download; snapshot_download('thinkingmachines/Inkling-2-Mini', local_dir='$D')"
+
+# 校验：文件大小与 HF API tree 逐一比对一致（见下表）；
+#       完整性以 vllm nightly 就位后的加载 + 首跑验证
+ls -l "$D"
+```
+
+| 文件 | 字节 | 说明 |
+| --- | ---: | --- |
+| `model-00001-of-00001.safetensors` | 19,526,019,168 | 权重（NVFP4，modelopt） |
+| `mtp.safetensors` | 635,801,416 | DSpark 投机草稿 |
+| `tokenizer.json` | 26,178,678 | 分词器（tiktoken，词表 200,058） |
+| 其余 11 个文件 | ~140,000 | config / chat_template / 量化配置 / README 等 |
+
+* 模型：`thinkingmachines/Inkling-2-Mini`（HF 原仓库；ModelScope 为等大小镜像，
+  多一个 `configuration.json`）。
+* 目录：`/data/huggingface-downloads/Inkling-2-Mini/`。
+* 账本：合计 20,191,646,235 字节（~20.2GB）；单卡 96G PRO6000
+  （条目 `inkling-2-mini-fp4-262k`，GPU 3）：权重 19.5G + mtp 0.6G +
+  262k KV ~48G（bf16）≈ 68G。
+* 实测：2026-11-26 20:09–20:43 完成（~34min，单连接均速 ~10MB/s）；16 个文件
+  大小与 HF API tree 逐一比对一致（ModelScope 多 `configuration.json` 76B，
+  `.gitattributes` 为镜像版 2075B vs HF 1570B）。
 
 ```
 # PC Qwen3.6 MoE
