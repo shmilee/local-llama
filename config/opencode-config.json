@@ -48,6 +48,7 @@
         },
         "deepseek-v4.1-flash-iq2-512k": {
           "name": "DeepSeek-V4.1-Flash · IQ2 · 512k",
+          "disabled": true,
           "limit": {
             "context": 524288,
             "input": 262144,
@@ -59,9 +60,19 @@
         },
         "qwen3.8-flash-next-iq3-1m": {
           "name": "Qwen3.8-Flash-Next · IQ3 · 1M",
-          "disabled": true,
           "limit": {
             "context": 1000000,
+            "input": 888888,
+            "output": 65536
+          },
+          "capabilities": {
+            "reasoning": { "supported": true }
+          }
+        },
+        "glm-5.3-flash-q3-1m": {
+          "name": "GLM-5.3-Flash · Q3 · 1M",
+          "limit": {
+            "context": 1048576,
             "input": 888888,
             "output": 65536
           },
