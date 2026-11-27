@@ -27,6 +27,8 @@ case "$BACKEND" in
             # b12500 起 GGML_CUDA_FA_ALL_QUANTS 弃用，all 等价且含新增 f8_e4m3 组合
             -DGGML_CUDA_FA_QUANTS=all
         )
+        # nvml.h（b12776 起 ggml-cuda.cu 编译期需要）由 pixi.toml 的
+        # cuda-nvml-dev 依赖提供，随环境 include 路径自动可见
         ;;
     vulkan)
         BACKEND_FLAGS=(

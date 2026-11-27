@@ -15,7 +15,7 @@ pixi run   -e llamacpp-cuda llamacpp-verify   # 验证安装（bin + --version +
 pixi run   -e llamacpp-cuda llamacpp-path     # 打印 llama-server 绝对路径
 ```
 
-版本与构建细节见 `pixi.toml` 的 feature 注释（当前 `LLAMACPP_VERSION = "b12500"`）。
+版本与构建细节见 `pixi.toml` 的 feature 注释（当前 `LLAMACPP_VERSION = "b12801"`）。
 
 ### Arch Linux 包（备用）
 

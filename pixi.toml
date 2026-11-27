@@ -124,7 +124,7 @@ libgomp = "*"
 CMAKE_PREFIX_PATH = "$CONDA_PREFIX"
 
 # llama.cpp 版本号（对应 GitHub release tag）
-LLAMACPP_VERSION = "b12500"
+LLAMACPP_VERSION = "b12801"
 # 注意：LLAMACPP_BACKEND 只在各后端 feature 中定义
 # （pixi 多个 feature 定义同名环境变量时，feature 列表靠前者获胜，
 #   base 里绝不能定义该变量，否则会静默覆盖 backend feature 的值）
@@ -167,6 +167,10 @@ cuda-nvcc = "*"
 cuda-cudart-dev = "*"
 # cuBLAS（ggml-cuda 无条件链接 CUDA::cublas）
 libcublas-dev = "*"
+# NVML 头文件（nvml.h）：b12776 起 ggml-cuda.cu 编译期 #include <nvml.h>
+# （运行时 dlsym 动态加载，无链接依赖）；conda CUDA 拆分包默认不含，
+# 显式添加 dev 头（随 cuda-version 锁解析到 13.2.86）
+cuda-nvml-dev = "*"
 # --- 可选 ---
 # NCCL：仅 -DGGML_CUDA_NCCL=ON 时需要（多卡 NCCL 通信）
 # nccl = "2.*"
