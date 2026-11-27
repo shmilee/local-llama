@@ -6,7 +6,7 @@
 | 权重 | 主：NVFP4（modelopt）19.5G + mtp.safetensors 606M（`Inkling-2-Mini/`）。后备：GGUF UD-Q8_K_XL mainline layout 21.2G + mmproj-BF16 + dspark BF16（`Inkling-2-Mini-GGUF/`）。下载记录见 `docs/models.md`「5. MoE, Inkling-2-Mini」 |
 | 平台 | PRO6000（8×96G），GPU 3（node 0，单卡，不共卡） |
 | 测试版本 | 主：vLLM 0.34.1rc1.dev214+g62d538c61（nightly，2026-11-26 构建，含 vllm/models/inkling2 包）；torch 2.14.0+cu132。后备：llama.cpp b12801（2026-11-27 复测，#33063 FA indexed bias 生效） |
-| 资源占用 | 实测 94.2G / 96G（NVFP4 权重 19.5G + KV 池自动扩满，256k=262,144 ctx） |
+| 资源占用 | gmu 0.8（2026-11-27 设定）：KV 池 ~52G ≈ 27 万 token（一个满 256k 会话 48G + 余量），整卡占用 ~78G、释放 ~20G；默认 gmu 实测 94.2G（KV 池 70G，富余 50%） |
 
 > 命令约定：`${PORT}` 由 llama-swap 加载时分配；宏已展开。
 

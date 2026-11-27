@@ -748,6 +748,11 @@ models:
       # 官方 recipe dgx_spark_gb10 变体（TP1 + 262,144 上限，96-128G 档验证值）
       --tensor-parallel-size 1
       --max-model-len ${ctx_256k}
+      # 显存预算（96G 卡）：权重 19.5G + dspark 0.6G + ViT ~1G + ctx/graph
+      # ~4G ≈ 25G 固定；KV 192KiB/token × 262,144 = 48G（一个满会话）。
+      # gmu 0.8 ≈ 76.5G 上限 → KV 池 ~52G（≈27 万 token，满会话 + 余量），
+      # 整卡释放 ~20G 给其它工作负载（默认 gmu 实测 94.2G，KV 池富余 50%）
+      --gpu-memory-utilization 0.8
       --reasoning-parser inkling
       --enable-auto-tool-choice
       --tool-call-parser inkling
