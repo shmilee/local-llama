@@ -485,7 +485,7 @@ printf 'store-dir=%s\n' "$PREFIX/pnpm-store" > "$APP_DIR/.npmrc"
 # pnpm 10.4+ 默认拦截依赖构建脚本，需显式放行（官方 install.sh 同款）
 ALLOW_BUILD=""
 if version_ge "$("$PNPM_BIN" --version)" "10.4.0"; then
-    ALLOW_BUILD="--allow-build=msgpackr-extract --allow-build=node-pty"
+    ALLOW_BUILD="--allow-build=msgpackr-extract --allow-build=node-pty --allow-build=@parcel/watcher"
 fi
 
 # 实际已安装版本（读 node_modules 内 package.json，未安装则为空）
@@ -590,8 +590,10 @@ if [ "$WITH_OMP" = 1 ]; then
 
     # 以安装器自身的 help 为准决定是否传 --skills（v3 起内置 skills，不再有该参数）
     OMP_INSTALL_HELP="$("$NODE_BIN" "$OMP_ENTRY" install --help 2>&1 || true)"
-    OMP_ARGS=(install --no-tui --companion=no --preset="$OMP_PRESET" --background-subagents="$OMP_BG")
+    OMP_ARGS=(install --no-tui --preset="$OMP_PRESET")
     case "$OMP_INSTALL_HELP" in
+        *--companion*)  OMP_ARGS+=(--companion=no) ;;
+        *--background-subagents*)  OMP_ARGS+=(--background-subagents="$OMP_BG") ;;
         *--skills*) OMP_ARGS+=(--skills="$OMP_SKILLS") ;;
     esac
     [ "$OMP_DRY" = 1 ] && OMP_ARGS+=(--dry-run)
