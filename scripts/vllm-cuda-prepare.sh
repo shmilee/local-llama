@@ -7,7 +7,9 @@
 set -eu
 
 SP="$CONDA_PREFIX/lib/python3.12/site-packages/nvidia"
-ROOT="$CONDA_PREFIX/vllm-cuda"
+# CUDA toolkit 布局目录：取 activation.env 的 CUDA_HOME（vllm-cuda /
+# vllm-nightly 各自独立），缺省回退 vllm-cuda
+ROOT="${CUDA_HOME:-$CONDA_PREFIX/vllm-cuda}"
 
 if [ ! -d "$SP/cu13/bin" ]; then
     echo "FATAL: 未找到 $SP/cu13（pip 的 nvidia-cuda-nvcc 包未安装？）" >&2

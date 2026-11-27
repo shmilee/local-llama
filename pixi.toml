@@ -87,6 +87,17 @@ find-links = [
     { url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu130/torchvision" },
     { url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu130/torchcodec" },
     { url = "https://mirrors.aliyun.com/pytorch-wheels/cu130" },
+    # cu132 目录（vllm-nightly 用：vLLM nightly 官方按 CUDA 13.2 构建，与平台
+    # 声明 cuda=13.2 匹配；南大/上交镜像均全量同步。官方源:
+    # https://download.pytorch.org/whl/cu132）
+    { url = "https://mirrors.nju.edu.cn/pytorch/whl/cu132/torch" },
+    { url = "https://mirrors.nju.edu.cn/pytorch/whl/cu132/torchaudio" },
+    { url = "https://mirrors.nju.edu.cn/pytorch/whl/cu132/torchvision" },
+    { url = "https://mirrors.nju.edu.cn/pytorch/whl/cu132/torchcodec" },
+    { url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu132/torch" },
+    { url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu132/torchaudio" },
+    { url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu132/torchvision" },
+    { url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu132/torchcodec" },
 ]
 
 
@@ -565,6 +576,64 @@ vllm-cuda-verify = "bash $PIXI_PROJECT_ROOT/scripts/vllm-cuda-verify.sh"
 
 
 # ============================================================
+# Feature: vLLM nightly（独立环境：Inkling-2-Mini 等新架构）
+#
+# 稳定版 vLLM 在 vllm-cuda 环境（0.34，在役服务用）。nightly 环境专收
+# 稳定版尚未支持的架构（2026-11-26：inkling2_loop，官方 recipe 要求
+# >=0.35/nightly）；0.35 正式发布并验证后，该模型迁回 vllm-cuda，
+# 本环境退役。独立 solve-group，与 vllm-cuda 互不影响包解析。
+#
+#   pixi install -e vllm-nightly
+#   pixi run   -e vllm-nightly vllm-nightly-verify
+#
+# vllm nightly wheel 取自 wheels.vllm.ai（PEP 503 index，per-dep index）；
+# torch 系按 nightly METADATA 精确 pin 的 cu132 栈（官方构建口径），
+# wheel 走 find-links 国内镜像。
+# 驱动要求：CUDA 13.2 前向兼容（本机 595.58 已验证 torch/cu132 可用）。
+# ============================================================
+[feature.vllm-nightly]
+platforms = ["linux-64-cu13"]
+
+[feature.vllm-nightly.dependencies]
+python = "3.12.*"
+# gcc/gxx 钉 15：cu132 栈的 cuda_toolkit-13.2.x 元包硬 pin nvidia-cuda-nvcc
+# 13.2.78，其 host_config 不支持 gcc 16（flashinfer JIT 探针实测 #error）。
+# nvcc 13.2 + gcc 15.3 组合在 llamacpp-cuda 环境已验证可编译 CUDA 代码。
+# （对照：vllm-cuda 环境是 cu130 栈 → nvcc 13.5.37，兼容 gcc 16，无需此 pin）
+gcc_linux-64 = "15.*"
+gxx_linux-64 = "15.*"
+
+[feature.vllm-nightly.activation.env]
+PATH = "$CONDA_PREFIX/vllm-nightly/bin:$PATH"
+CUDA_HOME = "$CONDA_PREFIX/vllm-nightly"
+CUDACXX = "$CONDA_PREFIX/vllm-nightly/bin/nvcc"
+CXX = "x86_64-conda-linux-gnu-g++"
+FLASHINFER_CUDA_ARCH_LIST = "12.0a"
+FLASHINFER_EXTRA_CUDAFLAGS = "-DCCCL_DISABLE_CTK_COMPATIBILITY_CHECK"
+
+[feature.vllm-nightly.pypi-dependencies]
+# nightly 版本号形如 0.34.1rc1.devN+gSHA（0.34 之后的 dev 序列，
+# 对应 vLLM 0.35 开发线）。wheels.vllm.ai 只保留最新一个 nightly，
+# 须精确 pin；上游滚动出新 dev 或发 0.35 稳定版时改 pin 重 lock。
+# 2026-11-26：dev214+g62d538c61（含 vllm/models/inkling2 完整包：
+# configs / nvidia loop / renderer / speculative / tests）。
+vllm = { version = "==0.34.1rc1.dev214+g62d538c61", index = "https://wheels.vllm.ai/nightly" }
+pip = "*"
+# torch 系四件套：nightly 官方按 cu132 构建（与平台声明 cuda=13.2 一致），
+# 版本按 vllm wheel METADATA 的精确 pin（torch==2.14.0 / torchaudio==2.11.1 /
+# torchvision==0.29.2 / torchcodec>=0.16）。cu132 wheel 走 find-links 国内镜像。
+torch = { version = "==2.14.0+cu132" }
+torchaudio = { version = "==2.11.1+cu132" }
+torchvision = { version = "==0.29.2+cu132" }
+torchcodec = { version = "==0.17.0+cu132" }
+
+[feature.vllm-nightly.tasks]
+# 复用 vllm-cuda 的两个脚本（prepare 的 toolkit 目录取 CUDA_HOME）
+vllm-nightly-prepare = "bash $PIXI_PROJECT_ROOT/scripts/vllm-cuda-prepare.sh"
+vllm-nightly-verify = "bash $PIXI_PROJECT_ROOT/scripts/vllm-cuda-verify.sh"
+
+
+# ============================================================
 # Feature: SGLang (PyPI, CUDA 13 后端)
 #
 # 与 vLLM 同样的策略：PyPI 装 sglang，torch 系从 cu130 源取。
@@ -647,4 +716,5 @@ sdcpp-cuda = { features = ["sdcpp-base", "sdcpp-cuda"], solve-group = "sdcpp-cud
 strata-cuda = { features = ["strata-base", "strata-cuda"], solve-group = "strata-cuda" }
 maya-cuda = { features = ["maya-base", "maya-cuda"], solve-group = "maya-cuda" }
 vllm-cuda = { features = ["vllm-cuda"], solve-group = "vllm-cuda" }
+vllm-nightly = { features = ["vllm-nightly"], solve-group = "vllm-nightly" }
 sglang-cuda = { features = ["sglang-cuda"], solve-group = "sglang-cuda" }
