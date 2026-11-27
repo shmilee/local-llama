@@ -89,7 +89,7 @@ llama-swap-start.sh                           # 启动脚本
 | `qwen3.8-flash-next-fp4-1m` | vLLM（YaRN） | NVFP4（1M 上下文，TP2） |
 | `glm-5.3-flash-q3-1m` | Project Maya | Unsloth Q3_K_XL（GLM-5.3-Flash，1M） |
 | `qwen3.8-flash-next-iq3-1m` | strata flash_next | ISTA-DAS IQ3_XXS（1M，视觉已启用） |
-| `inkling-2-mini-fp4-262k` | vLLM（nightly 独立环境） | NVFP4（Inkling-2-Mini 26B/3.5B，262k，TP1） |
+| `inkling-2-mini-fp4-256k` | vLLM（nightly 独立环境） | NVFP4（Inkling-2-Mini 26B/3.5B，256k，TP1） |
 
 已归档 7 条目（2026-11-16）：cmd 与实测冻结于对应模型文档
 （`docs/models/Qwen3.8-27B.md` / `docs/models/Qwen3.8-Flash-Next.md`）。

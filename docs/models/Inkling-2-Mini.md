@@ -6,7 +6,7 @@
 | 权重 | 主：NVFP4（modelopt）19.5G + mtp.safetensors 606M（`Inkling-2-Mini/`）。后备：GGUF UD-Q8_K_XL mainline layout 21.2G + mmproj-BF16 + dspark BF16（`Inkling-2-Mini-GGUF/`）。下载记录见 `docs/models.md`「5. MoE, Inkling-2-Mini」 |
 | 平台 | PRO6000（8×96G），GPU 3（node 0，单卡，不共卡） |
 | 测试版本 | 主：vLLM 0.34.1rc1.dev214+g62d538c61（nightly，2026-11-26 构建，含 vllm/models/inkling2 包）；torch 2.14.0+cu132。后备：llama.cpp b12801（2026-11-27 复测，#33063 FA indexed bias 生效） |
-| 资源占用 | 实测 94.2G / 96G（NVFP4 权重 19.5G + KV 池自动扩满，262k ctx） |
+| 资源占用 | 实测 94.2G / 96G（NVFP4 权重 19.5G + KV 池自动扩满，256k=262,144 ctx） |
 
 > 命令约定：`${PORT}` 由 llama-swap 加载时分配；宏已展开。
 
@@ -14,10 +14,10 @@
 
 | 条目 | 后端 | ctx | prefill | decode | dspark | 显存 | 状态 |
 | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| `inkling-2-mini-fp4-262k` | vLLM nightly（TP1） | 262k | @253k ~7.2K t/s（31k 前缀命中） | @30k 190 / @253k 127 t/s | 接受率 18-20%，mean 2.27-2.37 | 94.2G | 在役 |
-| （未登记）llama.cpp b12801 Q8 | llama.cpp（单卡） | 262k f16 KV | @30k 2911 / @253k新token 910 t/s | @30k 74.9 / @253k 44.7 t/s | 接受率 21.5%/15.0%，mean 2.06/1.74 | 35.1G | 后备（仍慢于 vLLM 2.5-7.8×，Qwen 回归无损） |
+| `inkling-2-mini-fp4-256k` | vLLM nightly（TP1） | 256k | @253k ~7.2K t/s（31k 前缀命中） | @30k 190 / @253k 127 t/s | 接受率 18-20%，mean 2.27-2.37 | 94.2G | 在役 |
+| （未登记）llama.cpp b12801 Q8 | llama.cpp（单卡） | 256k f16 KV | @30k 2911 / @253k新token 910 t/s | @30k 74.9 / @253k 44.7 t/s | 接受率 21.5%/15.0%，mean 2.06/1.74 | 35.1G | 后备（仍慢于 vLLM 2.5-7.8×，Qwen 回归无损） |
 
-## `inkling-2-mini-fp4-262k`（在役）
+## `inkling-2-mini-fp4-256k`（在役）
 
 ### cmd（2026-11-27 快照；活动条目以 config 为准）
 
@@ -64,7 +64,7 @@ env：`CUDA_VISIBLE_DEVICES=3`；ttl 36000；routing group3（与 group1/2 并�
   互不影响），但 nightly 每日滚动——vllm-nightly 环境的 pin 滚动失效时需改
   pixi.toml 重 lock（见 pixi.toml vllm-nightly 注释）。
 * 1M 上下文单卡不可行（f16 KV 192G），双卡层切分方案 2026-11-26 按资源预算
-  否决；262k 为 96-128G 档官方验证上限。
+  否决；256k（262,144）为 96-128G 档官方验证上限。
 * 显存 94.2G/96G 偏紧（vLLM 默认 gmu 把 KV 池扩满）：GPU 3 专用（group3），
   无共卡风险；若未来 3 卡要跑别的，需显式加 `--gpu-memory-utilization`。
 
@@ -113,7 +113,7 @@ b12776 版本坑（实测）：
 
 ## 决策记录
 
-* 2026-11-26 上午：vLLM 路线首发——登记条目 `inkling-2-mini-fp4-262k`
+* 2026-11-26 上午：vLLM 路线首发——登记条目 `inkling-2-mini-fp4-256k`
   （NVFP4 权重 20.2G 已下载）；阻塞于 vLLM 0.35 未发布（稳定版 vllm-cuda 0.34
   不支持 inkling2_loop）。
 * 2026-11-26 下午：尝试 llama.cpp 路线——b12500 缺全部三个 PR

@@ -71,7 +71,7 @@
    循环架构 + DSpark（2026-11 新模型，当前热点）
     - looped MoE：prelude 6 层 + core 12 层 × 3 pass + coda 6 层 = 48 次层访问、
       48 个独立 KV cache（~192KiB/tok @bf16）；128 专家 top-8；
-      checkpoint 原生 1M，GB200 单卡验证 1M，96-128G 档验证上限 262k
+      checkpoint 原生 1M，GB200 单卡验证 1M，96-128G 档验证上限 256k（262,144）
     - <https://huggingface.co/thinkingmachines/Inkling-2-Mini>
       + NVFP4（modelopt，官方唯一量化）：`model-00001-of-00001.safetensors` 19.5G、
         `mtp.safetensors`（DSpark 投机草稿）606M，apache-2.0
@@ -295,8 +295,8 @@ ls -l "$D"
   多一个 `configuration.json`）。
 * 目录：`/data/huggingface-downloads/Inkling-2-Mini/`。
 * 账本：合计 20,191,646,235 字节（~20.2GB）；单卡 96G PRO6000
-  （条目 `inkling-2-mini-fp4-262k`，GPU 3）：权重 19.5G + mtp 0.6G +
-  262k KV ~48G（bf16）≈ 68G。
+  （条目 `inkling-2-mini-fp4-256k`，GPU 3）：权重 19.5G + mtp 0.6G +
+  256k KV ~48G（bf16）≈ 68G。
 * 实测：2026-11-26 20:09–20:43 完成（~34min，单连接均速 ~10MB/s）；16 个文件
   大小与 HF API tree 逐一比对一致（ModelScope 多 `configuration.json` 76B，
   `.gitattributes` 为镜像版 2075B vs HF 1570B）。

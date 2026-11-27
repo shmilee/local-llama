@@ -371,7 +371,8 @@ models:
   # 命名规则：<家族>-<量化>-<上下文>（全小写）。
   # 量化映射：q8=Q8_K_XL，fp8=FP8，fp4=NVFP4，iq2=IQ2_XXS，iq3=IQ3_XXS；
   # 后端由量化隐含（GGUF/q8 → llama.cpp，fp8/fp4 → vLLM，iq* → strata），细节写 description。
-  # 上下文：256k / 512k / 1m。旧 ID 保留为 aliases（includeAliasesInList: false，不进客户端列表）。
+  # 上下文：256k / 512k / 1m（k=1024、M=1000：256k=262,144、1m=1,000,000；
+  # 1,048,576 严格是 1.05M，存量 1m 条目历史命名保留，新条目按此规则）。旧 ID 保留为 aliases（includeAliasesInList: false，不进客户端列表）。
   # 1a. q27b
   "qwen3.8-27b-q8-256k":
     # cmd: the command to run to start the inference server.
@@ -719,7 +720,7 @@ models:
       context: 1048576
     sendLoadingState: true
 
-  # 5v. Inkling-2-Mini · NVFP4 —— vLLM nightly 后端 @ 262k，单卡
+  # 5v. Inkling-2-Mini · NVFP4 —— vLLM nightly 后端 @ 256k（262,144），单卡
   # - 模型：thinkingmachines/Inkling-2-Mini（apache-2.0），looped MoE
   #   （26B 总参 / 3.5B 激活）：prelude 6 层 + core 12 层 × 3 pass + coda 6 层
   #   = 48 次层访问，48 个独立 KV cache（~192KiB/tok @bf16，KV 是同规格模型的
@@ -738,13 +739,13 @@ models:
   #   dspark mean acceptance 2.27-2.37；显存 94.2G/96G（KV 池自动扩满）
   # - GPU 3（node 0，不共卡）：group1 用 2、group2 用 4,6，均避开 CUDA0
   #   （防 CLIP 误用）
-  "inkling-2-mini-fp4-262k":
+  "inkling-2-mini-fp4-256k":
     useModelName: "${models_dir}/Inkling-2-Mini"
     cmd: |
       pixi run -m ${env.LOCAL_LLAMA_HOME} -e vllm-nightly vllm serve
       ${models_dir}/Inkling-2-Mini
       --host 127.0.0.1 --port ${PORT}
-      # 官方 recipe dgx_spark_gb10 变体（TP1 + 262k 上限，96-128G 档验证值）
+      # 官方 recipe dgx_spark_gb10 变体（TP1 + 262,144 上限，96-128G 档验证值）
       --tensor-parallel-size 1
       --max-model-len ${ctx_256k}
       --reasoning-parser inkling
@@ -760,7 +761,7 @@ models:
       --sse-keep-alive-interval 15
     env:
       - "CUDA_VISIBLE_DEVICES=3"
-    description: "Looped MoE (26B/3.5B active) from Thinking Machines, NVFP4, vLLM nightly, DSpark spec decode, 262k ctx"
+    description: "Looped MoE (26B/3.5B active) from Thinking Machines, NVFP4, vLLM nightly, DSpark spec decode, 256k ctx"
     aliases:
       - "Inkling-2-Mini"
     metadata:
@@ -890,7 +891,7 @@ routing:
           exclusive: false
           persistent: true
           members:
-            - "inkling-2-mini-fp4-262k"
+            - "inkling-2-mini-fp4-256k"
 
       # The matrix lists the model combinations that are allowed to run
       # concurrently. When a model is requested, the solver makes room for it
@@ -957,5 +958,5 @@ routing:
         # - higher priority requests are serviced first in the queue
         priority:
           qwen3.8-27b-fp8-1m: 10
-          inkling-2-mini-fp4-262k: 8
+          inkling-2-mini-fp4-256k: 8
           qwen3.8-flash-next-fp4-1m: 6
