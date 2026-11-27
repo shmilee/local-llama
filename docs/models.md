@@ -79,11 +79,33 @@
           + F8_E4M3 scale，block 16），注意力/embeddings/norms 保持 BF16；
           safetensors 里 BF16 张量多不代表非 FP4 量化
     - vLLM 需要 nightly（>=0.35，0.35 未发布；inkling2_loop 架构稳定版不支持）
+      + 本仓库 `vllm-nightly` 独立 pixi 环境（torch 2.14.0+cu132 栈，gcc 钉 15）
+      + 实测（2026-11-27，PRO6000 GPU 3）：prefill @253k ~7.2K t/s、
+        decode @30k/253k ctx 190/127 t/s、dspark mean acceptance 2.3
+    - llama.cpp 路线（后备）：mainline 需 b12611+（#32704）+ b12722+（DSpark
+      #32218）；b12776 实测 Q8_K_XL 冒烟全过，但 rel-bias 注意力无 CUDA FA，
+      prefill O(n²)（253k 冷灌 809s vs vLLM 31s）；坑：`--ubatch-size 4096`
+      OOM（~100GiB 计算 buffer）、`--ngld` 别名拒载、编译需 `cuda-nvml-dev`
     - recipe: <https://recipes.vllm.ai/thinkingmachines/Inkling-2-Mini>
       + `--reasoning-parser inkling --enable-auto-tool-choice --tool-call-parser inkling`
       + `--speculative-config '{"method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic"}'`
     - ModelScope 镜像 <https://modelscope.cn/models/thinkingmachines/Inkling-2-Mini>
       （本次实测比 hf-mirror 快 ~35×，见下载记录）
+    - GGUF <https://huggingface.co/unsloth/Inkling-2-Mini-GGUF>（ModelScope 同名镜像，
+      本次运行路线，下载记录见下）
+      + UD-Q8_K_XL 21.2G（本次选）/ Q4_K_XL 16.4G / Q4_K_M 15.9G / IQ4_XS 14.7G /
+        IQ3_XXS 10.8G / IQ2_XXS 7.9G / IQ1_S 7.2G / IQ1_M 7.5G
+      + **同仓库两种 layout**：根文件是 Unsloth loop layout（仅 unslothai/llama.cpp
+        prebuilt / Unsloth Studio 可读）；mainline llama.cpp 用
+        `Mainline_Support/*.gguf_file`（权重逐字节相同，Q8 PPL 差 0.002），
+        下载后须改名 `.gguf`
+      + dspark 投机：mainline 用 `dspark/dspark-Inkling-2-Mini-BF16-mainline.gguf_file`
+        (715M) 或 `Mainline_Support/dspark-Inkling-2-Mini-Q8_0.gguf_file` (481M)；
+        根 `dspark-Inkling-2-Mini-BF16.gguf` (617M) 是旧 drafter 格式，mainline #32218 拒载
+      + `mmproj-BF16.gguf` (612M) 两种 layout 通用
+      + mainline 版本要求：#32694 架构（11-20 合入）+ #32704 循环 scale 修复（≥b12611）
+        + #32218 DSpark（≥b12722）+ #33063 FA indexed bias（b12801）；
+        本仓库选 b12801（2026-11-27，复测 prefill 2.9×/decode 1.8× 于 b12776）
 
 11. MoE, Qwen3.6, Alibaba Cloud, Text + Image + Video
    - 基础工作, 速度优势
@@ -278,6 +300,40 @@ ls -l "$D"
 * 实测：2026-11-26 20:09–20:43 完成（~34min，单连接均速 ~10MB/s）；16 个文件
   大小与 HF API tree 逐一比对一致（ModelScope 多 `configuration.json` 76B，
   `.gitattributes` 为镜像版 2075B vs HF 1570B）。
+
+```
+# 服务器下载 Inkling-2-Mini-GGUF（2026-11-26，~24.3GB，llama.cpp mainline 路线）
+# 选型：unsloth UD-Q8_K_XL 的 mainline layout（Mainline_Support/ 目录，权重与根
+#       文件逐字节相同、PPL 差 0.002）+ mmproj-BF16（根，两种 layout 通用）+
+#       dspark BF16 mainline 格式（dspark/ 目录 -mainline 文件）；
+#       mainline 需 ≥b12722（#32218 DSpark 合入），本仓库升级至 b12776。
+# .gguf_file 后缀是 unsloth 防混用措施，下载后改名 .gguf。
+# 速度：ModelScope 单连接 ~10MB/s，3 文件并行。
+D=/data/huggingface-downloads/Inkling-2-Mini-GGUF
+mkdir -p "$D"
+B=https://modelscope.cn/models/unsloth/Inkling-2-Mini-GGUF/resolve/master
+curl -fL -C - -o "$D/Inkling-2-Mini-UD-Q8_K_XL.gguf" \
+  "$B/Mainline_Support/Inkling-2-Mini-UD-Q8_K_XL.gguf_file" &
+curl -fL -C - -o "$D/mmproj-BF16.gguf" "$B/mmproj-BF16.gguf" &
+curl -fL -C - -o "$D/dspark-Inkling-2-Mini-BF16.gguf" \
+  "$B/dspark/dspark-Inkling-2-Mini-BF16-mainline.gguf_file" &
+wait
+# 校验：三个文件大小 22,867,452,896 / 641,805,760 / 749,371,936
+stat -c "%s %n" "$D"/*
+```
+
+| 文件 | 字节 | 说明 |
+| --- | ---: | --- |
+| `Inkling-2-Mini-UD-Q8_K_XL.gguf` | 22,867,452,896 | UD-Q8_K_XL（mainline layout，源 `Mainline_Support/`） |
+| `mmproj-BF16.gguf` | 641,805,760 | 视觉编码器（根文件，两种 layout 通用） |
+| `dspark-Inkling-2-Mini-BF16.gguf` | 749,371,936 | DSpark 投机草稿，mainline 格式（源 `dspark/…-mainline.gguf_file`） |
+
+* 模型：`unsloth/Inkling-2-Mini-GGUF`（ModelScope 镜像；HF 原仓库同名）。
+  根文件为 Unsloth layout，mainline 读不了（候选池 #5 有说明），故取
+  Mainline_Support / -mainline 变体。
+* 同目录 `Inkling-2-Mini/`（NVFP4，vLLM 路线）暂留。
+* 实测：2026-11-26 21:26–22:02 完成（3 文件并行 ~10MB/s，~36min）；
+  三个文件大小与 ModelScope 文件列表逐一比对一致。
 
 ```
 # PC Qwen3.6 MoE

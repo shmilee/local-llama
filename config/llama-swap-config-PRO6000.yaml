@@ -719,7 +719,7 @@ models:
       context: 1048576
     sendLoadingState: true
 
-  # 5v. Inkling-2-Mini · NVFP4 —— vLLM 后端 @ 262k，单卡
+  # 5v. Inkling-2-Mini · NVFP4 —— vLLM nightly 后端 @ 262k，单卡
   # - 模型：thinkingmachines/Inkling-2-Mini（apache-2.0），looped MoE
   #   （26B 总参 / 3.5B 激活）：prelude 6 层 + core 12 层 × 3 pass + coda 6 层
   #   = 48 次层访问，48 个独立 KV cache（~192KiB/tok @bf16，KV 是同规格模型的
@@ -727,16 +727,21 @@ models:
   #   （mtp.safetensors 606M，同 checkpoint 内）
   # - 依据：官方 recipe https://recipes.vllm.ai/thinkingmachines/Inkling-2-Mini
   #   （default 变体 NVFP4，TP1；1M 上下文仅 GB200 186G 单卡验证，96-128G 档
-  #   H100/Spark 限 262,144，本条从之）
-  # - 需要 vLLM >= 0.35（0.35 未发布，nightly）：vllm-cuda 环境当前 0.34，
-  #   升级前本条目启动会失败（inkling2_loop 架构稳定版不支持），见 docs/vllm.md
-  # - 显存预算：权重 19.5G + mtp 0.6G + 262k KV ~48G（bf16）≈ 68G < 96G
+  #   H100/Spark 限 262,144，本条从之；1M 双卡方案 2026-11-26 按资源预算否决）
+  # - 需要 vLLM nightly（0.35 未发布；inkling2_loop 稳定版不支持）：
+  #   独立 vllm-nightly pixi 环境（torch 2.14.0+cu132 栈，gcc 钉 15——
+  #   cu132 的 cuda_toolkit 元包硬 pin nvcc 13.2.78，不兼容 gcc 16 的
+  #   flashinfer JIT），与在役 vllm-cuda 0.34 环境互不影响，见 pixi.toml
+  # - 实测（2026-11-27，GPU 3，合成压测 prompt；对照 llama.cpp b12776 Q8）：
+  #   prefill @253k ~7.2K t/s（31k 前缀缓存命中）vs llama.cpp 313 t/s；
+  #   decode @30k ctx 190 t/s / @253k ctx 127 t/s vs llama.cpp 50.8/24.9 t/s；
+  #   dspark mean acceptance 2.27-2.37；显存 94.2G/96G（KV 池自动扩满）
   # - GPU 3（node 0，不共卡）：group1 用 2、group2 用 4,6，均避开 CUDA0
   #   （防 CLIP 误用）
   "inkling-2-mini-fp4-262k":
     useModelName: "${models_dir}/Inkling-2-Mini"
     cmd: |
-      pixi run -m ${env.LOCAL_LLAMA_HOME} -e vllm-cuda vllm serve
+      pixi run -m ${env.LOCAL_LLAMA_HOME} -e vllm-nightly vllm serve
       ${models_dir}/Inkling-2-Mini
       --host 127.0.0.1 --port ${PORT}
       # 官方 recipe dgx_spark_gb10 变体（TP1 + 262k 上限，96-128G 档验证值）
@@ -746,8 +751,8 @@ models:
       --enable-auto-tool-choice
       --tool-call-parser inkling
       --speculative-config '{"method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic"}'
-      # llama-swap 指标与常用参数（其余同 default-vllm 宏；KV cache 默认 bf16，
-      # 未验证 fp8 KV 对 48 个 per-pass cache 的行为，不从宏继承 --kv-cache-dtype）
+      # llama-swap 指标（同 default-vllm 宏口径；KV cache 用 vLLM 默认 dtype，
+      # recipe 未验证 fp8 KV 对 48 个 per-pass cache 的行为）
       --enable-per-request-metrics
       --enable-prompt-tokens-details
       --per-request-spec-decode-metrics summary
@@ -760,7 +765,7 @@ models:
       - "Inkling-2-Mini"
     metadata:
       port: ${PORT}
-      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_256k}"
+      note: "The ${MODEL_ID} is running on port ${PORT}, context=${ctx_256k} (NVFP4, vllm-nightly)"
     ttl: 36000
     sendLoadingState: true
     timeouts:

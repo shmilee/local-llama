@@ -35,7 +35,7 @@
 | Qwen3.8-Flash-Next | 主力（规划）`qwen3.8-flash-next-fp4-1m`；实验中 `qwen3.8-flash-next-iq3-1m`；4 条目已归档 | `qwen3.8-flash-next-fp4-1m`, `qwen3.8-flash-next-iq3-1m`（+ 归档 4） | [Qwen3.8-Flash-Next.md](Qwen3.8-Flash-Next.md) |
 | DeepSeek-V4.1-Flash | 实验中（strata，group2） | `deepseek-v4.1-flash-iq2-512k` | [DeepSeek-V4.1-Flash.md](DeepSeek-V4.1-Flash.md) |
 | Qwen3.6-35B-A3B | 已被 27B 取代（PRO6000 历史；T14p 仍在用） | Qwen3.6-35B-A3B | [Qwen3.6-35B-A3B.md](Qwen3.6-35B-A3B.md) |
-| Inkling-2-Mini | 待上线（2026-11-26 已下载 + 登记条目；需 vLLM nightly ≥0.35） | `inkling-2-mini-fp4-262k` | [Inkling-2-Mini.md](Inkling-2-Mini.md) |
+| Inkling-2-Mini | 在役（vLLM nightly 独立环境，2026-11-27）；llama.cpp b12776 后备（无 FA，prefill O(n²)） | `inkling-2-mini-fp4-262k` | [Inkling-2-Mini.md](Inkling-2-Mini.md) |
 
 条目 ID 命名规则：`<家族>-<量化>-<上下文>`，全小写；量化映射 `q8`=Q8_K_XL、
 `fp8`=FP8、`fp4`=NVFP4、`iq2`=IQ2_XXS、`iq3`=IQ3_XXS；上下文 `256k`/`512k`/`1m`；
